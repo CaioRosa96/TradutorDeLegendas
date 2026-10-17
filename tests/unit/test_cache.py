@@ -96,3 +96,16 @@ def test_concorrencia_multithread_sem_lock(cache_temporario):
     with ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(operacao, range(40)))
 
+
+def test_metricas_e_limpeza_cache(cache_temporario):
+    """Verifica contagem de registros, calculo de tamanho e limpeza completa do cache."""
+    assert cache_temporario.contar_traducoes() == 0
+    cache_temporario.put("Text 1", "en", "pt", "Texto 1")
+    cache_temporario.put("Text 2", "en", "pt", "Texto 2")
+    assert cache_temporario.contar_traducoes() == 2
+    assert cache_temporario.obter_tamanho_bytes() > 0
+
+    cache_temporario.limpar_tudo()
+    assert cache_temporario.contar_traducoes() == 0
+
+

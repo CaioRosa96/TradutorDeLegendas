@@ -22,3 +22,22 @@ def test_para_google(entrada, esperado):
 ])
 def test_destino_para_mkv(entrada, esperado):
     assert Idiomas.destino_para_mkv(entrada) == esperado
+
+def test_nomes_amigaveis_e_codigos():
+    opcoes = Idiomas.opcoes_destino_exibicao()
+    assert "Português (pt)" in opcoes
+    assert "Inglês (en)" in opcoes
+    assert "Japonês (ja)" in opcoes
+
+    assert Idiomas.nome_para_codigo_destino("Português (pt)") == "pt"
+    assert Idiomas.nome_para_codigo_destino("Inglês (en)") == "en"
+    assert Idiomas.nome_para_codigo_destino("pt") == "pt"
+
+    assert Idiomas.rotular_origem("jpn") == "Japonês (jpn)"
+    assert Idiomas.rotular_origem("auto") == "Automático (auto)"
+    assert Idiomas.rotular_origem("xyz") == "XYZ (xyz)"
+
+    assert Idiomas.nome_para_codigo_origem("Japonês (jpn)") == "jpn"
+    assert Idiomas.nome_para_codigo_origem("Automático (auto)") == "auto"
+    assert Idiomas.nome_para_codigo_origem("auto") == "auto"
+

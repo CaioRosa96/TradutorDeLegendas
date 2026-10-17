@@ -60,3 +60,29 @@ class CacheTraducoes:
                 (hash_origem, src_lang, dest_lang, texto_traduzido) 
                 VALUES (?, ?, ?, ?)
             ''', (h, src_lang, dest_lang, texto_traduzido))
+
+    def contar_traducoes(self) -> int:
+        """Retorna o número total de traduções armazenadas no cache."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM traducoes")
+            row = cursor.fetchone()
+            return row[0] if row else 0
+
+    def obter_tamanho_bytes(self) -> int:
+        """Retorna o tamanho do arquivo SQLite do cache em bytes."""
+        if os.path.exists(self.db_path):
+            return os.path.getsize(self.db_path)
+        return 0
+
+    def limpar_tudo(self):
+        """Remove todos os registros do cache e executa VACUUM para otimizar espaço."""
+        conn = self._get_connection()
+        try:
+            conn.execute("DELETE FROM traducoes;")
+            conn.commit()
+            conn.isolation_level = None
+            conn.execute("VACUUM;")
+        finally:
+            conn.close()
+
+

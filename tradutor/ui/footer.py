@@ -2,13 +2,21 @@
 
 import customtkinter as ctk
 from .tema import CORES
+from ..i18n import I18n
 
 
 class FooterView(ctk.CTkFrame):
     """Rodape contendo status, progresso, acoes principais e console retratil."""
 
     def __init__(self, master, on_start_cb, on_cancel_cb):
-        super().__init__(master, fg_color=CORES["bg_sidebar"], corner_radius=0)
+        largura_borda = CORES.get("borda_largura", 1)
+        super().__init__(
+            master,
+            fg_color=CORES["bg_sidebar"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            corner_radius=0
+        )
         self.on_start_cb = on_start_cb
         self.on_cancel_cb = on_cancel_cb
 
@@ -16,13 +24,15 @@ class FooterView(ctk.CTkFrame):
         self._construir_widgets()
 
     def _construir_widgets(self):
+        largura_borda = CORES.get("borda_largura", 1)
+
         # Linha de status e porcentagem
         frame_status_linha = ctk.CTkFrame(self, fg_color="transparent")
         frame_status_linha.pack(fill="x", padx=16, pady=(10, 4))
 
         self.lbl_status_msg = ctk.CTkLabel(
             frame_status_linha,
-            text="Pronto para processar",
+            text=I18n.t("status_aguardando"),
             font=("Segoe UI", 11),
             text_color=CORES["texto_secundario"]
         )
@@ -38,7 +48,7 @@ class FooterView(ctk.CTkFrame):
 
         self.progressbar = ctk.CTkProgressBar(
             self,
-            fg_color=CORES["bg_card"],
+            fg_color=CORES.get("progressbar_bg", CORES["bg_card"]),
             progress_color=CORES["destaque_azul"],
             height=6
         )
@@ -51,24 +61,28 @@ class FooterView(ctk.CTkFrame):
 
         self.btn_toggle_log = ctk.CTkButton(
             frame_botoes,
-            text="▼ Console de Logs",
+            text=I18n.t("btn_console"),
             command=self.toggle_logs,
             width=130,
             height=32,
             fg_color=CORES["bg_card"],
             hover_color=CORES["bg_card_hover"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            text_color=CORES["texto_principal"],
             font=("Segoe UI", 11)
         )
         self.btn_toggle_log.pack(side="left")
 
         self.btn_run = ctk.CTkButton(
             frame_botoes,
-            text="INICIAR TRADUCAO",
+            text=I18n.t("btn_iniciar"),
             command=self.on_start_cb,
             width=200,
             height=32,
             fg_color=CORES["destaque_verde"],
             hover_color=CORES["destaque_verde_hover"],
+            text_color="#000000" if CORES.get("nome") == "MS-DOS Retrô" else "white",
             font=("Segoe UI", 12, "bold"),
             state="disabled"
         )
@@ -76,35 +90,90 @@ class FooterView(ctk.CTkFrame):
 
         self.btn_cancelar = ctk.CTkButton(
             frame_botoes,
-            text="✖ Cancelar",
+            text=I18n.t("btn_cancelar"),
             command=self.on_cancel_cb,
             width=120,
             height=32,
             fg_color=CORES["destaque_vermelho"],
             hover_color=CORES["destaque_vermelho_hover"],
+            text_color="white",
             font=("Segoe UI", 11, "bold")
         )
 
         # Gaveta Inferior de Log (Oculta por padrao)
-        self.frame_gaveta_log = ctk.CTkFrame(self, fg_color=CORES["bg_janela"], height=135)
+        self.frame_gaveta_log = ctk.CTkFrame(
+            self,
+            fg_color=CORES["bg_janela"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            height=135
+        )
         self.textbox = ctk.CTkTextbox(
             self.frame_gaveta_log,
             fg_color=CORES["bg_console"],
-            text_color=CORES["texto_secundario"],
+            text_color=CORES["texto_principal"],
             font=("Consolas", 10),
             state="disabled"
         )
         self.textbox.pack(fill="both", expand=True, padx=10, pady=6)
 
+    def aplicar_tema(self, cores: dict):
+        """Propaga o novo tema para barra de progresso, console e botoes de acao."""
+        largura_borda = cores.get("borda_largura", 1)
+
+        self.configure(
+            fg_color=cores["bg_sidebar"],
+            border_color=cores["borda_card"],
+            border_width=largura_borda
+        )
+        self.lbl_status_msg.configure(text_color=cores["texto_secundario"])
+        self.lbl_progresso_pct.configure(text_color=cores["texto_principal"])
+        self.progressbar.configure(
+            fg_color=cores.get("progressbar_bg", cores["bg_card"]),
+            progress_color=cores["destaque_azul"]
+        )
+
+        self.btn_toggle_log.configure(
+            fg_color=cores["bg_card"],
+            hover_color=cores["bg_card_hover"],
+            border_color=cores["borda_card"],
+            border_width=largura_borda,
+            text_color=cores["texto_principal"]
+        )
+        self.btn_run.configure(
+            fg_color=cores["destaque_verde"],
+            hover_color=cores["destaque_verde_hover"],
+            text_color="#000000" if cores.get("nome") == "MS-DOS Retrô" else "white"
+        )
+        self.btn_cancelar.configure(
+            fg_color=cores["destaque_vermelho"],
+            hover_color=cores["destaque_vermelho_hover"]
+        )
+        self.frame_gaveta_log.configure(
+            fg_color=cores["bg_janela"],
+            border_color=cores["borda_card"],
+            border_width=largura_borda
+        )
+        self.textbox.configure(fg_color=cores["bg_console"], text_color=cores["texto_principal"])
+
+    def redefinir_textos(self):
+        """Atualiza os textos traduziveis do rodape apos troca de idioma."""
+        self.lbl_status_msg.configure(text=I18n.t("status_aguardando"))
+        self.btn_toggle_log.configure(
+            text=I18n.t("btn_console") if not self._logs_visivel else I18n.t("btn_ocultar_console")
+        )
+        self.btn_run.configure(text=I18n.t("btn_iniciar"))
+        self.btn_cancelar.configure(text=I18n.t("btn_cancelar"))
+
     def toggle_logs(self):
         """Alterna a visibilidade da gaveta do console de logs."""
         if self._logs_visivel:
             self.frame_gaveta_log.pack_forget()
-            self.btn_toggle_log.configure(text="▼ Console de Logs")
+            self.btn_toggle_log.configure(text=I18n.t("btn_console"))
             self._logs_visivel = False
         else:
             self.frame_gaveta_log.pack(fill="x", padx=16, pady=(0, 10))
-            self.btn_toggle_log.configure(text="▲ Ocultar Logs")
+            self.btn_toggle_log.configure(text=I18n.t("btn_ocultar_console"))
             self._logs_visivel = True
 
     def set_status(self, msg: str):
@@ -143,10 +212,10 @@ class FooterView(ctk.CTkFrame):
         """Ajusta botoes e status para estado de processamento ativo."""
         self.btn_run.pack_forget()
         self.btn_cancelar.pack(side="right")
-        self.btn_cancelar.configure(state="normal", text="✖ Cancelar")
+        self.btn_cancelar.configure(state="normal", text=I18n.t("btn_cancelar"))
         self.reset_progresso()
         self.limpar_log()
-        self.set_status("Iniciando pipeline assincrono...")
+        self.set_status(I18n.t("status_iniciando"))
 
     def configurar_modo_pronto(self, habilitar_iniciar: bool):
         """Ajusta botoes para estado de espera ou prontidao."""
@@ -156,4 +225,4 @@ class FooterView(ctk.CTkFrame):
 
     def configurar_modo_cancelando(self):
         """Sinaliza que o cancelamento esta sendo processado."""
-        self.btn_cancelar.configure(state="disabled", text="Cancelando...")
+        self.btn_cancelar.configure(state="disabled", text=I18n.t("status_cancelando"))

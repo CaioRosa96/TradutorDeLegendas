@@ -375,4 +375,7 @@ AGENTS.md
 contexto/
 .contexto/
 
+# Preferencias locais do usuario (configuracoes de UI)
+preferencias.json
+
 

@@ -2,6 +2,7 @@ import threading
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+from .idiomas import Idiomas
 
 try:
     import winsound
@@ -91,18 +92,22 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             self.frame_options, text="Idioma Preferido p/ MKV (ex: eng, jpn):"
         ).pack(side="left", padx=(10, 5), pady=5)
 
-        self.combo_lang = ctk.CTkOptionMenu(self.frame_options, values=["auto"], width=100)
+        rotulo_auto = Idiomas.rotular_origem("auto")
+        self.combo_lang = ctk.CTkOptionMenu(self.frame_options, values=[rotulo_auto], width=160)
+        self.combo_lang.set(rotulo_auto)
         self.combo_lang.pack(side="left", padx=(0, 10), pady=5)
 
         ctk.CTkLabel(
             self.frame_options, text="Destino:"
         ).pack(side="left", padx=(10, 5), pady=5)
 
+        opcoes_destino = Idiomas.opcoes_destino_exibicao()
         self.combo_lang_dest = ctk.CTkOptionMenu(
             self.frame_options, 
-            values=["pt", "en", "es", "fr", "de", "it", "ru", "ja", "ko", "zh-cn"], 
-            width=80
+            values=opcoes_destino, 
+            width=160
         )
+        self.combo_lang_dest.set("Português (pt)")
         self.combo_lang_dest.pack(side="left", padx=(0, 10), pady=5)
 
         self.var_manter_legenda = ctk.BooleanVar(value=False)
@@ -181,8 +186,8 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
 
     def _on_start_clicked(self):
         if self._controller:
-            idioma_origem = self.combo_lang.get().strip()
-            idioma_destino = self.combo_lang_dest.get().strip()
+            idioma_origem = Idiomas.nome_para_codigo_origem(self.combo_lang.get())
+            idioma_destino = Idiomas.nome_para_codigo_destino(self.combo_lang_dest.get())
             manter = self.var_manter_legenda.get()
             self._controller.start_translation(self.files, idioma_origem, idioma_destino, manter)
 
@@ -213,12 +218,13 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
     def update_language_options(self, langs):
         """Atualiza a lista de idiomas após varredura dos MKVs."""
         def _update():
-            opcoes = ["auto"] + langs
-            self.combo_lang.configure(values=opcoes)
+            codigos = ["auto"] + langs
+            rotulos = [Idiomas.rotular_origem(c) for c in codigos]
+            self.combo_lang.configure(values=rotulos)
             if len(langs) == 1:
-                self.combo_lang.set(langs[0])
+                self.combo_lang.set(Idiomas.rotular_origem(langs[0]))
             else:
-                self.combo_lang.set("auto")
+                self.combo_lang.set(Idiomas.rotular_origem("auto"))
         self.after(0, _update)
 
     def log(self, msg):
@@ -280,8 +286,10 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.btn_run.configure(state="disabled")
         self.lbl_files.configure(text="Nenhum arquivo selecionado", text_color="gray")
         self.progressbar.set(0)
-        self.combo_lang.configure(values=["auto"])
-        self.combo_lang.set("auto")
+        rotulo_auto = Idiomas.rotular_origem("auto")
+        self.combo_lang.configure(values=[rotulo_auto])
+        self.combo_lang.set(rotulo_auto)
+        self.combo_lang_dest.set("Português (pt)")
         self.textbox.configure(state="normal")
         self.textbox.delete("0.0", "end")
         self.textbox.configure(state="disabled")
