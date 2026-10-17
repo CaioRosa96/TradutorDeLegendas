@@ -1,10 +1,10 @@
-# Taradutor de Legendas
+# Tradutor de Legendas
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Xaxadox/TradutorDeLegendas/tests.yml?style=flat-square&label=Testes%20CI)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=flat-square)
 ![Licença](https://img.shields.io/badge/Licen%C3%A7a-MIT-green?style=flat-square)
 
-O **Taradutor de Legendas** é uma ferramenta de automação para extração, tradução e multiplexação de legendas em arquivos de vídeo MKV, bem como legendas avulsas nos formatos SRT e ASS. O sistema emprega processamento assíncrono para garantir alto desempenho, acompanhado por tolerância a falhas, cache persistente local e proteção de contexto via glossário dinâmico.
+O **Tradutor de Legendas** é uma ferramenta de automação para extração, tradução e multiplexação de legendas em arquivos de vídeo MKV, bem como legendas avulsas nos formatos SRT e ASS. O sistema emprega processamento assíncrono para garantir alto desempenho, acompanhado por tolerância a falhas, cache persistente local e proteção de contexto via glossário dinâmico.
 
 ---
 
@@ -63,7 +63,7 @@ python -m venv venv
 pip install -r requirements.txt
 
 # Inicie a aplicação
-python TaradutorLegendas26.py
+python TradutorLegendas26.py
 ```
 
 ---

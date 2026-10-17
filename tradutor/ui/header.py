@@ -16,11 +16,14 @@ class HeaderView(ctk.CTkFrame):
         self._construir_widgets()
 
     def _construir_widgets(self):
+        fonte_ui = CORES.get("fonte_ui", "Segoe UI")
+        raio_card = CORES.get("raio_card", 4)
+
         # Lado Esquerdo: Marca do Aplicativo
         self.lbl_logo = ctk.CTkLabel(
             self,
-            text="TARADUTOR",
-            font=("Segoe UI", 16, "bold"),
+            text="TRADUTOR",
+            font=(fonte_ui, 16, "bold"),
             text_color=CORES["texto_principal"]
         )
         self.lbl_logo.pack(side="left", padx=(18, 6), pady=12)
@@ -28,7 +31,7 @@ class HeaderView(ctk.CTkFrame):
         self.lbl_sub = ctk.CTkLabel(
             self,
             text=I18n.t("app_sub"),
-            font=("Segoe UI", 13),
+            font=(fonte_ui, 13),
             text_color=CORES["texto_secundario"]
         )
         self.lbl_sub.pack(side="left", pady=12)
@@ -36,10 +39,10 @@ class HeaderView(ctk.CTkFrame):
         self.badge_versao = ctk.CTkLabel(
             self,
             text="v2.7.0",
-            font=("Segoe UI", 10, "bold"),
+            font=(fonte_ui, 10, "bold"),
             fg_color=CORES["destaque_azul"],
-            text_color="white",
-            corner_radius=4,
+            text_color=CORES.get("btn_destaque_txt", "#ffffff"),
+            corner_radius=raio_card,
             width=46,
             height=20
         )
@@ -63,7 +66,7 @@ class HeaderView(ctk.CTkFrame):
 
         self.btn_tema = ctk.CTkButton(
             self,
-            text=f"🎨 {I18n.t('btn_visualizar')}",
+            text=I18n.t("btn_visualizar"),
             font=("Segoe UI", 11),
             fg_color=CORES["bg_card"],
             hover_color=CORES["bg_card_hover"],
@@ -77,7 +80,7 @@ class HeaderView(ctk.CTkFrame):
 
         self.btn_grimorio = ctk.CTkButton(
             self,
-            text=f"📖 {I18n.t('btn_grimorio')}",
+            text=I18n.t("btn_grimorio"),
             font=("Segoe UI", 11),
             fg_color=CORES["bg_card"],
             hover_color=CORES["bg_card_hover"],
@@ -98,17 +101,26 @@ class HeaderView(ctk.CTkFrame):
         self.lbl_status.pack(side="right", padx=(10, 16), pady=12)
 
     def aplicar_tema(self, cores: dict):
-        """Propaga as novas cores e bordas do tema ativo para os widgets do cabecalho."""
+        """Propaga as novas cores, fontes e bordas do tema ativo para os widgets do cabecalho."""
+        fonte_ui = cores.get("fonte_ui", "Segoe UI")
+        raio_card = cores.get("raio_card", 4)
+        largura_borda = cores.get("borda_largura", 1)
+
         self.configure(fg_color=cores["bg_sidebar"])
-        self.lbl_logo.configure(text_color=cores["texto_principal"])
-        self.lbl_sub.configure(text_color=cores["texto_secundario"])
+        self.lbl_logo.configure(text_color=cores["texto_principal"], font=(fonte_ui, 16, "bold"))
+        self.lbl_sub.configure(text_color=cores["texto_secundario"], font=(fonte_ui, 13))
 
         self.badge_versao.configure(
             fg_color=cores["destaque_azul"],
-            text_color="#000000" if cores.get("nome") == "MS-DOS Retrô" else "white"
+            text_color=cores.get("btn_destaque_txt", "#ffffff"),
+            corner_radius=raio_card,
+            font=(fonte_ui, 10, "bold")
         )
 
-        largura_borda = cores.get("borda_largura", 1)
+        self.btn_config.configure(font=(fonte_ui, 14), corner_radius=raio_card)
+        self.btn_tema.configure(font=(fonte_ui, 11), corner_radius=raio_card)
+        self.btn_grimorio.configure(font=(fonte_ui, 11), corner_radius=raio_card)
+
         for btn in (self.btn_config, self.btn_tema, self.btn_grimorio):
             btn.configure(
                 fg_color=cores["bg_card"],
@@ -118,7 +130,7 @@ class HeaderView(ctk.CTkFrame):
                 text_color=cores["texto_principal"]
             )
 
-        self.lbl_status.configure(text_color=cores["destaque_verde"])
+        self.lbl_status.configure(text_color=cores["destaque_verde"], font=(fonte_ui, 11))
 
     def set_status(self, texto: str, cor: str = None):
         """Atualiza a mensagem e cor do indicador de status do cabecalho."""

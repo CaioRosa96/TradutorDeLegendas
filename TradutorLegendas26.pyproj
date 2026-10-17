@@ -4,13 +4,13 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>2803662d-2497-4e42-9c0d-7686b774b523</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>TaradutorLegendas26.py</StartupFile>
+    <StartupFile>TradutorLegendas26.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <Name>TaradutorLegendas26</Name>
-    <RootNamespace>TaradutorLegendas26</RootNamespace>
+    <Name>TradutorLegendas26</Name>
+    <RootNamespace>TradutorLegendas26</RootNamespace>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,7 +21,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="TaradutorLegendas26.py" />
+    <Compile Include="TradutorLegendas26.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

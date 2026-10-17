@@ -25,6 +25,8 @@ class FooterView(ctk.CTkFrame):
 
     def _construir_widgets(self):
         largura_borda = CORES.get("borda_largura", 1)
+        raio_card = CORES.get("raio_card", 6)
+        fonte_ui = CORES.get("fonte_ui", "Segoe UI")
 
         # Linha de status e porcentagem
         frame_status_linha = ctk.CTkFrame(self, fg_color="transparent")
@@ -33,7 +35,7 @@ class FooterView(ctk.CTkFrame):
         self.lbl_status_msg = ctk.CTkLabel(
             frame_status_linha,
             text=I18n.t("status_aguardando"),
-            font=("Segoe UI", 11),
+            font=(fonte_ui, 11),
             text_color=CORES["texto_secundario"]
         )
         self.lbl_status_msg.pack(side="left")
@@ -41,7 +43,7 @@ class FooterView(ctk.CTkFrame):
         self.lbl_progresso_pct = ctk.CTkLabel(
             frame_status_linha,
             text="0%",
-            font=("Segoe UI", 11, "bold"),
+            font=(fonte_ui, 11, "bold"),
             text_color=CORES["texto_principal"]
         )
         self.lbl_progresso_pct.pack(side="right")
@@ -50,6 +52,7 @@ class FooterView(ctk.CTkFrame):
             self,
             fg_color=CORES.get("progressbar_bg", CORES["bg_card"]),
             progress_color=CORES["destaque_azul"],
+            corner_radius=raio_card,
             height=6
         )
         self.progressbar.set(0)
@@ -65,12 +68,13 @@ class FooterView(ctk.CTkFrame):
             command=self.toggle_logs,
             width=130,
             height=32,
+            corner_radius=raio_card,
             fg_color=CORES["bg_card"],
             hover_color=CORES["bg_card_hover"],
             border_color=CORES["borda_card"],
             border_width=largura_borda,
             text_color=CORES["texto_principal"],
-            font=("Segoe UI", 11)
+            font=(fonte_ui, 11)
         )
         self.btn_toggle_log.pack(side="left")
 
@@ -80,10 +84,11 @@ class FooterView(ctk.CTkFrame):
             command=self.on_start_cb,
             width=200,
             height=32,
+            corner_radius=raio_card,
             fg_color=CORES["destaque_verde"],
             hover_color=CORES["destaque_verde_hover"],
-            text_color="#000000" if CORES.get("nome") == "MS-DOS Retrô" else "white",
-            font=("Segoe UI", 12, "bold"),
+            text_color=CORES.get("btn_destaque_txt", "#ffffff"),
+            font=(fonte_ui, 12, "bold"),
             state="disabled"
         )
         self.btn_run.pack(side="right")
@@ -94,10 +99,11 @@ class FooterView(ctk.CTkFrame):
             command=self.on_cancel_cb,
             width=120,
             height=32,
+            corner_radius=raio_card,
             fg_color=CORES["destaque_vermelho"],
             hover_color=CORES["destaque_vermelho_hover"],
             text_color="white",
-            font=("Segoe UI", 11, "bold")
+            font=(fonte_ui, 11, "bold")
         )
 
         # Gaveta Inferior de Log (Oculta por padrao)
@@ -106,12 +112,14 @@ class FooterView(ctk.CTkFrame):
             fg_color=CORES["bg_janela"],
             border_color=CORES["borda_card"],
             border_width=largura_borda,
+            corner_radius=raio_card,
             height=135
         )
         self.textbox = ctk.CTkTextbox(
             self.frame_gaveta_log,
             fg_color=CORES["bg_console"],
             text_color=CORES["texto_principal"],
+            corner_radius=raio_card,
             font=("Consolas", 10),
             state="disabled"
         )
@@ -120,17 +128,20 @@ class FooterView(ctk.CTkFrame):
     def aplicar_tema(self, cores: dict):
         """Propaga o novo tema para barra de progresso, console e botoes de acao."""
         largura_borda = cores.get("borda_largura", 1)
+        raio_card = cores.get("raio_card", 6)
+        fonte_ui = cores.get("fonte_ui", "Segoe UI")
 
         self.configure(
             fg_color=cores["bg_sidebar"],
             border_color=cores["borda_card"],
             border_width=largura_borda
         )
-        self.lbl_status_msg.configure(text_color=cores["texto_secundario"])
-        self.lbl_progresso_pct.configure(text_color=cores["texto_principal"])
+        self.lbl_status_msg.configure(text_color=cores["texto_secundario"], font=(fonte_ui, 11))
+        self.lbl_progresso_pct.configure(text_color=cores["texto_principal"], font=(fonte_ui, 11, "bold"))
         self.progressbar.configure(
             fg_color=cores.get("progressbar_bg", cores["bg_card"]),
-            progress_color=cores["destaque_azul"]
+            progress_color=cores["destaque_azul"],
+            corner_radius=raio_card
         )
 
         self.btn_toggle_log.configure(
@@ -138,23 +149,34 @@ class FooterView(ctk.CTkFrame):
             hover_color=cores["bg_card_hover"],
             border_color=cores["borda_card"],
             border_width=largura_borda,
-            text_color=cores["texto_principal"]
+            text_color=cores["texto_principal"],
+            font=(fonte_ui, 11),
+            corner_radius=raio_card
         )
         self.btn_run.configure(
             fg_color=cores["destaque_verde"],
             hover_color=cores["destaque_verde_hover"],
-            text_color="#000000" if cores.get("nome") == "MS-DOS Retrô" else "white"
+            text_color=cores.get("btn_destaque_txt", "#ffffff"),
+            font=(fonte_ui, 12, "bold"),
+            corner_radius=raio_card
         )
         self.btn_cancelar.configure(
             fg_color=cores["destaque_vermelho"],
-            hover_color=cores["destaque_vermelho_hover"]
+            hover_color=cores["destaque_vermelho_hover"],
+            font=(fonte_ui, 11, "bold"),
+            corner_radius=raio_card
         )
         self.frame_gaveta_log.configure(
             fg_color=cores["bg_janela"],
             border_color=cores["borda_card"],
-            border_width=largura_borda
+            border_width=largura_borda,
+            corner_radius=raio_card
         )
-        self.textbox.configure(fg_color=cores["bg_console"], text_color=cores["texto_principal"])
+        self.textbox.configure(
+            fg_color=cores["bg_console"],
+            text_color=cores["texto_principal"],
+            corner_radius=raio_card
+        )
 
     def redefinir_textos(self):
         """Atualiza os textos traduziveis do rodape apos troca de idioma."""

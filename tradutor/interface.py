@@ -61,6 +61,11 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         """Injeta a referencia do Controller mediador."""
         self._controller = controller
 
+    @property
+    def controller(self):
+        """Retorna a instancia do controlador mediador."""
+        return self._controller
+
     # ── 1. Montagem e Composicao dos Componentes ────────────────────────────
 
     def _montar_layout(self):
@@ -250,6 +255,14 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             if PreferenciasUsuario.obter("tocar_som", True) and winsound:
                 try:
                     winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                except Exception:
+                    pass
+            if PreferenciasUsuario.obter("abrir_pasta_ao_concluir", False) and self.files:
+                try:
+                    import os
+                    pasta_destino = os.path.dirname(self.files[0])
+                    if pasta_destino and os.path.exists(pasta_destino):
+                        os.startfile(pasta_destino)
                 except Exception:
                     pass
         self.after(0, _finalizar)

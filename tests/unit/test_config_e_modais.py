@@ -91,7 +91,7 @@ def test_propagacao_tema_e_idioma_interface():
         # 2. Testa mudanca de idioma para ingles
         I18n.definir_idioma("en")
         app._aplicar_novo_idioma("en")
-        assert "Taradutor Subtitle Translator" in app.title()
+        assert "Tradutor Subtitle Translator" in app.title()
         assert "Subtitles" in app.header.lbl_sub.cget("text")
         assert "TRANSLATION PARAMETERS" in app.sidebar.lbl_secao.cget("text")
         assert "Portuguese (pt)" in app.sidebar.combo_lang_dest.get()
@@ -102,7 +102,7 @@ def test_propagacao_tema_e_idioma_interface():
         # 3. Testa mudanca de idioma de volta para portugues
         I18n.definir_idioma("pt-br")
         app._aplicar_novo_idioma("pt-br")
-        assert "Taradutor de Legendas" in app.title()
+        assert "Tradutor de Legendas" in app.title()
         assert "Legendas" in app.header.lbl_sub.cget("text")
         assert "PARÂMETROS DE TRADUÇÃO" in app.sidebar.lbl_secao.cget("text")
         assert "Português (pt)" in app.sidebar.combo_lang_dest.get()

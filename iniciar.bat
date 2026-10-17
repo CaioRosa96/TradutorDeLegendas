@@ -23,6 +23,6 @@ if errorlevel 1 (
 
 echo.
 echo [INFO] Iniciando aplicacao...
-python TaradutorLegendas26.py
+python TradutorLegendas26.py
 
 pause

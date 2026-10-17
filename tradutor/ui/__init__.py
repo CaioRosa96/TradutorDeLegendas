@@ -1,4 +1,4 @@
-"""Subpacote de componentes visuais da interface grafica do Taradutor de Legendas."""
+"""Subpacote de componentes visuais da interface grafica do Tradutor de Legendas."""
 
 from .tema import CORES, TEMAS, definir_tema, obter_tema_ativo, inicializar_tema
 from .header import HeaderView

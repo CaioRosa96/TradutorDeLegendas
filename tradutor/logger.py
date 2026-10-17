@@ -14,7 +14,7 @@ def setup_logger():
     filepath = os.path.join(log_dir, filename)
 
     # Cria o logger raiz do projeto
-    logger = logging.getLogger("Taradutor")
+    logger = logging.getLogger("Tradutor")
     logger.setLevel(logging.INFO)
 
     # Evita adicionar múltiplos handlers se for chamado mais de uma vez

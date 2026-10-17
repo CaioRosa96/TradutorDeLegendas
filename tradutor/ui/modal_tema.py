@@ -23,10 +23,14 @@ class ModalTemas(ctk.CTkToplevel):
         self._construir_interface()
 
     def _construir_interface(self):
+        largura_borda = CORES.get("borda_largura", 1)
+        raio_card = CORES.get("raio_card", 6)
+        fonte_ui = CORES.get("fonte_ui", "Segoe UI")
+
         lbl_tit = ctk.CTkLabel(
             self,
             text=I18n.t("tema_titulo_topo"),
-            font=("Segoe UI", 13, "bold"),
+            font=(fonte_ui, 13, "bold"),
             text_color=CORES["texto_principal"]
         )
         lbl_tit.pack(pady=(16, 4))
@@ -34,12 +38,18 @@ class ModalTemas(ctk.CTkToplevel):
         lbl_desc = ctk.CTkLabel(
             self,
             text=I18n.t("tema_subtitulo"),
-            font=("Segoe UI", 11),
+            font=(fonte_ui, 11),
             text_color=CORES["texto_secundario"]
         )
         lbl_desc.pack(pady=(0, 14))
 
-        container = ctk.CTkFrame(self, fg_color=CORES["bg_sidebar"], corner_radius=8)
+        container = ctk.CTkFrame(
+            self,
+            fg_color=CORES["bg_sidebar"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            corner_radius=raio_card
+        )
         container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
         tema_ativo = obter_tema_ativo()
@@ -56,8 +66,8 @@ class ModalTemas(ctk.CTkToplevel):
             card = ctk.CTkFrame(
                 container,
                 fg_color=CORES["bg_card_hover"] if ativo else CORES["bg_card"],
-                corner_radius=6,
-                border_width=2 if ativo else 1,
+                corner_radius=raio_card,
+                border_width=2 if ativo else largura_borda,
                 border_color=CORES["destaque_azul"] if ativo else CORES["borda_card"]
             )
             card.pack(fill="x", padx=12, pady=5)
@@ -65,7 +75,7 @@ class ModalTemas(ctk.CTkToplevel):
             lbl_nome = ctk.CTkLabel(
                 card,
                 text=f"{'✓ ' if ativo else ''}{nome_exibicao}",
-                font=("Segoe UI", 11, "bold"),
+                font=(fonte_ui, 11, "bold"),
                 text_color=CORES["texto_principal"]
             )
             lbl_nome.pack(side="left", padx=12, pady=8)
@@ -73,10 +83,11 @@ class ModalTemas(ctk.CTkToplevel):
             btn_aplicar = ctk.CTkButton(
                 card,
                 text=I18n.t("tema_btn_ativo") if ativo else I18n.t("tema_btn_aplicar"),
-                font=("Segoe UI", 10, "bold"),
+                font=(fonte_ui, 10, "bold"),
                 fg_color=CORES["destaque_verde"] if ativo else CORES["destaque_azul"],
                 hover_color=CORES["destaque_verde_hover"] if ativo else CORES["destaque_azul_hover"],
-                text_color="#000000" if (ativo and CORES.get("nome") == "MS-DOS Retrô") else "white",
+                text_color=CORES.get("btn_destaque_txt", "#ffffff"),
+                corner_radius=raio_card,
                 width=72,
                 height=26,
                 command=lambda k=chave: self._aplicar_tema(k)

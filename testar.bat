@@ -1,6 +1,6 @@
 @echo off
 echo ===================================================
-echo     AMBIENTE DE TESTE ISOLADO - TARADUTOR
+echo     AMBIENTE DE TESTE ISOLADO - TRADUTOR
 echo ===================================================
 echo.
 

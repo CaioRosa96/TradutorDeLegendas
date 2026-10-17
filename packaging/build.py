@@ -80,7 +80,7 @@ def compilar_alvo(alvo_script: str, nome_saida: str, modo_onefile: bool = False)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Automação de Build do Taradutor de Legendas (.exe)")
+    parser = argparse.ArgumentParser(description="Automação de Build do Tradutor de Legendas (.exe)")
     parser.add_argument(
         "--alvo",
         choices=["moderno", "classico", "todos"],
@@ -96,9 +96,9 @@ def main():
 
     alvos = []
     if args.alvo in ("moderno", "todos"):
-        alvos.append(("TaradutorLegendas26.py", "TaradutorLegendas"))
+        alvos.append(("TradutorLegendas26.py", "TradutorLegendas"))
     if args.alvo in ("classico", "todos"):
-        alvos.append(("TaradutorLegendas26_Classico.py", "TaradutorLegendas_Classico"))
+        alvos.append(("TradutorLegendas26_Classico.py", "TradutorLegendas_Classico"))
 
     for script, nome in alvos:
         compilar_alvo(script, nome, modo_onefile=args.onefile)
