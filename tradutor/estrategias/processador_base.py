@@ -72,8 +72,7 @@ class ProcessadorArquivoBase(ABC):
             self.finalize(origem, caminho_legenda_final, caminhos_saida, idioma_destino, arq_trabalho, manter_legenda)
             return True
         finally:
-            if not self.is_running():
-                self.cleanup_temporary(arq_trabalho)
+            self.cleanup_temporary(arq_trabalho)
 
     def _check_conflicts(self, caminhos_saida, arq_trabalho) -> bool:
         """Lógica comum para perguntar ao usuário sobre arquivos existentes."""
