@@ -22,7 +22,7 @@ def test_limpar_nome_anime(nome_arquivo, nome_esperado):
 
 def test_auto_alimentar_api_falha(mocker):
     """Garante que se a API do AniList falhar, a função retorna None sem crachar."""
-    mock_post = mocker.patch('alimentar_glossario.requests.post')
+    mock_post = mocker.patch('tradutor.anilist.requests.post')
     mock_post.side_effect = Exception("Erro de conexão simulado")
     
     resultado = auto_alimentar("[SubsPlease] Anime Inexistente - 01 (1080p).mkv")
@@ -31,7 +31,7 @@ def test_auto_alimentar_api_falha(mocker):
 
 def test_auto_alimentar_sucesso(mocker):
     """Testa o fluxo feliz: encontra o anime, busca personagens e cria o arquivo no disco mockado."""
-    mock_post = mocker.patch('alimentar_glossario.requests.post')
+    mock_post = mocker.patch('tradutor.anilist.requests.post')
     
     mock_response_anime = MagicMock()
     mock_response_anime.json.return_value = {
