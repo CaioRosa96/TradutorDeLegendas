@@ -77,3 +77,22 @@ def test_sobrescrita_update(cache_temporario):
     # Atualiza (corrigindo acento)
     cache_temporario.put(texto, "en", "pt", "Maçã")
     assert cache_temporario.get(texto, "en", "pt") == "Maçã"
+
+
+def test_concorrencia_multithread_sem_lock(cache_temporario):
+    """
+    Simula rajadas de escritas e leituras concorrentes em múltiplas threads
+    para garantir que não ocorra 'sqlite3.OperationalError: database is locked'.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def operacao(i):
+        texto = f"Frase {i}"
+        traducao = f"Tradução {i}"
+        cache_temporario.put(texto, "en", "pt", traducao)
+        val = cache_temporario.get(texto, "en", "pt")
+        assert val == traducao
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(operacao, range(40)))
+

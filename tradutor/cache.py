@@ -10,14 +10,22 @@ class CacheTraducoes:
     Funciona como Checkpoint: se uma tradução grande cair aos 90%,
     a próxima tentativa vai pular os primeiros 90% instantaneamente.
     """
+    TIMEOUT_SEGUNDOS = 30.0
+
     def __init__(self, db_path="cache_traducoes.db"):
         # Salva o banco de dados na raiz do projeto
         self.db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_path)
         self._init_db()
-        
+
+    def _get_connection(self):
+        """Retorna uma conexão SQLite configurada com timeout estendido para alta concorrência."""
+        return sqlite3.connect(self.db_path, timeout=self.TIMEOUT_SEGUNDOS)
+
     def _init_db(self):
-        """Cria a tabela de cache se ela não existir."""
-        with sqlite3.connect(self.db_path) as conn:
+        """Cria a tabela de cache e ativa o modo WAL para leitura/escrita concorrente."""
+        with self._get_connection() as conn:
+            conn.execute('PRAGMA journal_mode=WAL;')
+            conn.execute('PRAGMA synchronous=NORMAL;')
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS traducoes (
                     hash_origem TEXT PRIMARY KEY,
@@ -36,8 +44,7 @@ class CacheTraducoes:
     def get(self, texto, src_lang, dest_lang):
         """Busca uma tradução no cache. Retorna None se não existir."""
         h = self._gerar_hash(texto, src_lang, dest_lang)
-        # Context manager fecha a conexão automaticamente, thread-safe
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.execute("SELECT texto_traduzido FROM traducoes WHERE hash_origem=?", (h,))
             row = cursor.fetchone()
             if row:
@@ -47,7 +54,7 @@ class CacheTraducoes:
     def put(self, texto, src_lang, dest_lang, texto_traduzido):
         """Salva uma nova tradução no cache."""
         h = self._gerar_hash(texto, src_lang, dest_lang)
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             conn.execute('''
                 INSERT OR REPLACE INTO traducoes 
                 (hash_origem, src_lang, dest_lang, texto_traduzido) 

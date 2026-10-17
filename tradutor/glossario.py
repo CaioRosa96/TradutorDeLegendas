@@ -75,13 +75,8 @@ class GerenciadorGlossario:
             # Se não encontrou na pasta e a busca automática estiver ativada, roda o extrator
             if not encontrou_especifico and self.habilitar_auto_alimentar:
                 try:
-                    import sys
-                    raiz_projeto = GerenciadorConfig.DIRETORIO_PROJETO
-                    if raiz_projeto not in sys.path:
-                        sys.path.insert(0, raiz_projeto)
-                    
-                    from alimentar_glossario import auto_alimentar
-                    novo_arquivo = auto_alimentar(self.video_filename)
+                    from .anilist import auto_alimentar
+                    novo_arquivo = auto_alimentar(self.video_filename, dir_especificos)
                     if novo_arquivo and os.path.exists(novo_arquivo):
                         self._load_file(novo_arquivo)
                 except Exception:

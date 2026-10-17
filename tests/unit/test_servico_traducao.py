@@ -153,3 +153,35 @@ async def test_traduzir_lote_excecao(servico_setup):
     # As legendas originais não podem ter sido apagadas
     assert subs[0].text == "Keep me 1"
     assert subs[1].text == "Keep me 2"
+
+
+@pytest.mark.asyncio
+async def test_traduzir_lote_preserva_linhas_vazias_sem_fallback(servico_setup):
+    """
+    Garante que se uma linha for vazia ou traduzida como espaço,
+    o sistema não descarta a linha com filter agressivo e não aciona fallback indevido.
+    """
+    servico, mock_engine, mock_logger, _ = servico_setup
+    
+    # Motor devolve 3 linhas, a do meio é vazia
+    mock_engine.translate.return_value = "Linha 1\n\nLinha 3"
+    
+    subs = [
+        EventoLegendaDummy("Line 1"),
+        EventoLegendaDummy(""),
+        EventoLegendaDummy("Line 3")
+    ]
+    lote_indices = [0, 1, 2]
+    
+    semaforo = asyncio.Semaphore(1)
+    pbar_lock = threading.Lock()
+    
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        await servico._traduzir_lote(executor, semaforo, lote_indices, subs, pbar_lock)
+        
+    # Deve chamar apenas 1 vez (em lote), sem fallback
+    assert mock_engine.translate.call_count == 1
+    assert subs[0].text == "Linha 1"
+    assert subs[1].text == ""
+    assert subs[2].text == "Linha 3"
+

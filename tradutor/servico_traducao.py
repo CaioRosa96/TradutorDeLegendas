@@ -76,8 +76,11 @@ class ServicoTraducao:
                     
                 traduzido_restaurado = self._glossary.remove_shield(traduzido, mapeamento)
                 
-                frases = [f.strip() for f in traduzido_restaurado.split("\n") if f.strip()]
-                frases_limpas = [self._limpar_quebras(f) for f in frases]
+                linhas_retornadas = traduzido_restaurado.split("\n")
+                if len(linhas_retornadas) == len(lote_indices) + 1 and not linhas_retornadas[-1].strip():
+                    linhas_retornadas = linhas_retornadas[:-1]
+
+                frases_limpas = [self._limpar_quebras(f.strip()) for f in linhas_retornadas]
 
                 if len(frases_limpas) == len(lote_indices):
                     for i, idx in enumerate(lote_indices):
