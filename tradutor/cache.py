@@ -1,6 +1,9 @@
 import sqlite3
 import hashlib
 import os
+import threading
+from contextlib import closing
+from .config import GerenciadorConfig
 
 class CacheTraducoes:
     """
@@ -13,17 +16,22 @@ class CacheTraducoes:
     TIMEOUT_SEGUNDOS = 30.0
 
     def __init__(self, db_path="cache_traducoes.db"):
-        # Salva o banco de dados na raiz do projeto
-        self.db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_path)
+        self._lock = threading.Lock()
+        if os.path.isabs(db_path):
+            self.db_path = db_path
+        else:
+            self.db_path = os.path.join(GerenciadorConfig.DIRETORIO_EXECUCAO, db_path)
         self._init_db()
 
     def _get_connection(self):
         """Retorna uma conexão SQLite configurada com timeout estendido para alta concorrência."""
-        return sqlite3.connect(self.db_path, timeout=self.TIMEOUT_SEGUNDOS)
+        conn = sqlite3.connect(self.db_path, timeout=self.TIMEOUT_SEGUNDOS)
+        conn.execute("PRAGMA busy_timeout=30000;")
+        return conn
 
     def _init_db(self):
         """Cria a tabela de cache e ativa o modo WAL para leitura/escrita concorrente."""
-        with self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn, conn:
             conn.execute('PRAGMA journal_mode=WAL;')
             conn.execute('PRAGMA synchronous=NORMAL;')
             conn.execute('''
@@ -44,7 +52,7 @@ class CacheTraducoes:
     def get(self, texto, src_lang, dest_lang):
         """Busca uma tradução no cache. Retorna None se não existir."""
         h = self._gerar_hash(texto, src_lang, dest_lang)
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute("SELECT texto_traduzido FROM traducoes WHERE hash_origem=?", (h,))
             row = cursor.fetchone()
             if row:
@@ -53,10 +61,36 @@ class CacheTraducoes:
         
     def put(self, texto, src_lang, dest_lang, texto_traduzido):
         """Salva uma nova tradução no cache."""
+        if texto_traduzido is None:
+            return
         h = self._gerar_hash(texto, src_lang, dest_lang)
-        with self._get_connection() as conn:
+        with self._lock, closing(self._get_connection()) as conn, conn:
             conn.execute('''
                 INSERT OR REPLACE INTO traducoes 
                 (hash_origem, src_lang, dest_lang, texto_traduzido) 
                 VALUES (?, ?, ?, ?)
             ''', (h, src_lang, dest_lang, texto_traduzido))
+
+    def contar_traducoes(self) -> int:
+        """Retorna o número total de traduções armazenadas no cache."""
+        with closing(self._get_connection()) as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM traducoes")
+            row = cursor.fetchone()
+            return row[0] if row else 0
+
+    def obter_tamanho_bytes(self) -> int:
+        """Retorna o tamanho do arquivo SQLite do cache em bytes."""
+        if os.path.exists(self.db_path):
+            return os.path.getsize(self.db_path)
+        return 0
+
+    def limpar_tudo(self):
+        """Remove todos os registros do cache e executa VACUUM para otimizar espaço."""
+        with self._lock, closing(self._get_connection()) as conn:
+            conn.execute("DELETE FROM traducoes;")
+            conn.commit()
+            conn.isolation_level = None
+            conn.execute("VACUUM;")
+
+
+

@@ -1,10 +1,11 @@
 import logging
 import os
 from datetime import datetime
+from .config import GerenciadorConfig
 
 def setup_logger():
     """Configura o sistema de log estruturado para escrever em arquivos."""
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+    log_dir = os.path.join(GerenciadorConfig.DIRETORIO_EXECUCAO, "logs")
     
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -13,7 +14,7 @@ def setup_logger():
     filepath = os.path.join(log_dir, filename)
 
     # Cria o logger raiz do projeto
-    logger = logging.getLogger("Taradutor")
+    logger = logging.getLogger("Tradutor")
     logger.setLevel(logging.INFO)
 
     # Evita adicionar múltiplos handlers se for chamado mais de uma vez
