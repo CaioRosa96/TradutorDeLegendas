@@ -1,3 +1,4 @@
+import threading
 import time
 from googletrans import Translator
 from .base import ITradutor
@@ -52,8 +53,11 @@ class MotorTraducaoGoogle(ITradutor):
         for tentativa in range(self._max_retries):
             try:
                 resposta = self._engine.translate(text, src=src_lang, dest=dest_lang)
+                if resposta is None or getattr(resposta, "text", None) is None:
+                    raise RuntimeError("Resposta vazia retornada pela API do Google.")
                 self._record_success()
                 return resposta.text
+
             except (TypeError, ValueError, AttributeError) as e:
                 self._record_failure()
                 app_logger.error(f"Erro permanente na API do Google: {e}")

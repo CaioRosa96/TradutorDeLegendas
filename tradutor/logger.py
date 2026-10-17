@@ -1,10 +1,11 @@
 import logging
 import os
 from datetime import datetime
+from .config import GerenciadorConfig
 
 def setup_logger():
     """Configura o sistema de log estruturado para escrever em arquivos."""
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+    log_dir = os.path.join(GerenciadorConfig.DIRETORIO_EXECUCAO, "logs")
     
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)

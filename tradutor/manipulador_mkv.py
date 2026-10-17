@@ -189,10 +189,15 @@ class ManipuladorMkv:
         try:
             resultado_mux = subprocess.run(
                 comando_mux, check=False, capture_output=True, text=True,
-                encoding='utf-8', errors='ignore',
+                encoding='utf-8', errors='ignore', timeout=600,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
             if resultado_mux.returncode not in (0, 1):
+                if os.path.exists(caminho_saida):
+                    try:
+                        os.remove(caminho_saida)
+                    except OSError:
+                        pass
                 erro_detalhe = resultado_mux.stderr.strip() or f"Código de saída {resultado_mux.returncode}"
                 raise RuntimeError(f"Erro ao embutir a legenda traduzida no MKV final: {erro_detalhe}")
             if resultado_mux.returncode == 1:

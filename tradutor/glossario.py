@@ -82,14 +82,28 @@ class GerenciadorGlossario:
                 except Exception:
                     pass
 
+    _PADRAO_TAGS_FORMATACAO = re.compile(r'(\{[^}\n]+\}|</?[a-zA-Z][^>\n]*>)')
+
     def apply_shield(self, text):
-        """Aplica o escudo substituindo termos por tokens."""
+        """Aplica o escudo substituindo termos e tags de formatação por tokens."""
         mapping = {}
-        if not self.glossario_map:
+        tem_tags = bool(self._PADRAO_TAGS_FORMATACAO.search(text))
+        if not self.glossario_map and not tem_tags:
             return text, mapping
             
         shielded_text = text
         counter = 0
+
+        if tem_tags:
+            def repl_tag(match):
+                nonlocal counter
+                token = f"TKGLOSS{counter}T"
+                mapping[token] = match.group(0)
+                counter += 1
+                return f" {token} "
+
+            shielded_text, _ = self._PADRAO_TAGS_FORMATACAO.subn(repl_tag, shielded_text)
+
         # Substitui os termos mais longos primeiro para evitar conflitos parciais
         sorted_keys = sorted(self.glossario_map.keys(), key=len, reverse=True)
         
@@ -116,11 +130,14 @@ class GerenciadorGlossario:
         final_text = text
         for token, tgt in mapping.items():
             # O token sempre começa com TKGLOSS e termina com T
-            # Essa regex captura se o Google tentar quebrar, minuscular ou espaçar o token.
+            # Usa [ \t]* em vez de \s* para nunca atravessar quebras de linha (\n) entre lotes.
             num = token[7:-1]
-            pattern = re.compile(r'(?i)\bT\s*K\s*G\s*L\s*O\s*S\s*S\s*' + str(num) + r'\s*T\b')
+            pattern = re.compile(r'(?i)\bT[ \t]*K[ \t]*G[ \t]*L[ \t]*O[ \t]*S[ \t]*S[ \t]*' + str(num) + r'[ \t]*T\b')
             final_text = pattern.sub(lambda _: tgt, final_text)
             
-        # Limpa espaços duplos que possam ter sido injetados
-        final_text = re.sub(r' +', ' ', final_text).strip()
+        # Limpa espaços duplos linha a linha preservando quebras \n de borda do lote
+        linhas = [re.sub(r'[ \t]+', ' ', linha).strip() for linha in final_text.split('\n')]
+        final_text = '\n'.join(linhas)
+        final_text = re.sub(r'(\{[^}\n]+\})[ \t]+', r'\1', final_text)
         return final_text
+

@@ -31,7 +31,15 @@ class GerenciadorConfig:
 
     @classmethod
     def get_mkvtoolnix_path(cls):
-        """Retorna o caminho do MKVToolNix, priorizando pasta local externa, depois embutida, depois sistema."""
+        """Retorna o caminho do MKVToolNix, priorizando pasta customizada, local externa, embutida e sistema."""
+        try:
+            from .config_usuario import PreferenciasUsuario
+            custom_path = PreferenciasUsuario.obter("mkvtoolnix_custom", "")
+            if custom_path and os.path.exists(os.path.join(custom_path, "mkvmerge.exe")):
+                return custom_path
+        except Exception:
+            pass
+
         local_externo = os.path.join(cls.DIRETORIO_EXECUCAO, "mkvtoolnix")
         if os.path.exists(os.path.join(local_externo, "mkvmerge.exe")):
             return local_externo

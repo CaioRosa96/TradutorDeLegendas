@@ -19,8 +19,11 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         return True
 
     def cleanup_temporary(self, arq_trabalho):
-        if os.path.exists(arq_trabalho) and "_ORIGINAL" in arq_trabalho:
-            os.remove(arq_trabalho)
+        if arq_trabalho and "_ORIGINAL" in arq_trabalho and os.path.exists(arq_trabalho):
+            try:
+                os.remove(arq_trabalho)
+            except OSError:
+                pass
 
     def get_output_paths(self, origem, idioma_destino, arq_trabalho) -> dict:
         destino_dir = os.path.dirname(origem)

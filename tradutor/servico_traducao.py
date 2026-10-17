@@ -54,7 +54,7 @@ class ServicoTraducao:
 
         textos_preparados = []
         for idx in lote_indices:
-            texto = subs[idx].text
+            texto = subs[idx].text.replace("\r\n", r"\N").replace("\n", r"\N")
             texto = texto.replace(r"\N", " \\N ").replace(r"\n", " \\n ")
             textos_preparados.append(texto)
 
