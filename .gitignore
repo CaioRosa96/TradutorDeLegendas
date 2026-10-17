@@ -368,3 +368,11 @@ docs/ideias_descartadas.md
 # Banco de dados SQLite local de cache de traducoes
 cache_traducoes.db
 *.db
+
+# Memória persistente e contexto de agentes de IA
+AGENTS.md
+.agents/
+contexto/
+.contexto/
+
+
