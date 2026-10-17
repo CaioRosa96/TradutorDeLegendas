@@ -111,3 +111,19 @@ def test_propagacao_tema_e_idioma_interface():
         assert "INICIAR TRADUÇÃO" in app.footer.btn_run.cget("text")
     finally:
         app.destroy()
+
+
+def test_inicializacao_interface_classica():
+    """Garante que a interface clássica pode ser instanciada e configurada com o Controller."""
+    from tradutor.interface_classica import InterfaceGrafica as InterfaceClassica
+    from tradutor.orquestrador import OrquestradorTraducoes
+    from tradutor.controlador import ControladorApp
+
+    app = InterfaceClassica()
+    try:
+        model = OrquestradorTraducoes()
+        controller = ControladorApp(app, model)
+        assert app._controller is controller
+        assert "Tradutor" in app.title()
+    finally:
+        app.destroy()

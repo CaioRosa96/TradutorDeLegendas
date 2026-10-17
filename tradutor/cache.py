@@ -1,6 +1,7 @@
 import sqlite3
 import hashlib
 import os
+from .config import GerenciadorConfig
 
 class CacheTraducoes:
     """
@@ -13,8 +14,10 @@ class CacheTraducoes:
     TIMEOUT_SEGUNDOS = 30.0
 
     def __init__(self, db_path="cache_traducoes.db"):
-        # Salva o banco de dados na raiz do projeto
-        self.db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_path)
+        if os.path.isabs(db_path):
+            self.db_path = db_path
+        else:
+            self.db_path = os.path.join(GerenciadorConfig.DIRETORIO_EXECUCAO, db_path)
         self._init_db()
 
     def _get_connection(self):

@@ -1,4 +1,5 @@
 import os
+import sys
 
 
 class GerenciadorConfig:
@@ -8,18 +9,37 @@ class GerenciadorConfig:
     MAX_CONCORRENTE = 5
     MAX_RETENTATIVAS = 3
 
-    # Raiz do projeto = diretório pai de tradutor/
-    DIRETORIO_PROJETO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    LOCAL_MKVTOOLNIX = os.path.join(DIRETORIO_PROJETO, "mkvtoolnix")
+    # Diretório onde o executável ou script está rodando (para dados persistentes)
+    DIRETORIO_EXECUCAO = (
+        os.path.dirname(sys.executable)
+        if getattr(sys, "frozen", False)
+        else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+
+    # Diretório onde os recursos e binários embutidos foram extraídos
+    DIRETORIO_RECURSOS = (
+        getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if getattr(sys, "frozen", False)
+        else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+
+    DIRETORIO_PROJETO = DIRETORIO_EXECUCAO
+    LOCAL_MKVTOOLNIX = os.path.join(DIRETORIO_EXECUCAO, "mkvtoolnix")
     SYSTEM_MKVTOOLNIX = r"C:\Program Files\MKVToolNix"
-    ARQUIVO_GLOSSARIO_PADRAO = os.path.join(DIRETORIO_PROJETO, "glossario.txt")
-    DIRETORIO_GLOSSARIOS = os.path.join(DIRETORIO_PROJETO, "glossarios")
+    ARQUIVO_GLOSSARIO_PADRAO = os.path.join(DIRETORIO_EXECUCAO, "glossario.txt")
+    DIRETORIO_GLOSSARIOS = os.path.join(DIRETORIO_EXECUCAO, "glossarios")
 
     @classmethod
     def get_mkvtoolnix_path(cls):
-        """Retorna o caminho do MKVToolNix, priorizando a cópia local."""
-        if os.path.exists(os.path.join(cls.LOCAL_MKVTOOLNIX, "mkvmerge.exe")):
-            return cls.LOCAL_MKVTOOLNIX
+        """Retorna o caminho do MKVToolNix, priorizando pasta local externa, depois embutida, depois sistema."""
+        local_externo = os.path.join(cls.DIRETORIO_EXECUCAO, "mkvtoolnix")
+        if os.path.exists(os.path.join(local_externo, "mkvmerge.exe")):
+            return local_externo
+
+        local_embutido = os.path.join(cls.DIRETORIO_RECURSOS, "mkvtoolnix")
+        if os.path.exists(os.path.join(local_embutido, "mkvmerge.exe")):
+            return local_embutido
+
         return cls.SYSTEM_MKVTOOLNIX
 
     @classmethod
@@ -33,3 +53,4 @@ class GerenciadorConfig:
         """Verifica se mkvmerge e mkvextract existem no sistema."""
         mkvmerge, mkvextract = cls.get_mkv_bins()
         return os.path.exists(mkvmerge) and os.path.exists(mkvextract)
+

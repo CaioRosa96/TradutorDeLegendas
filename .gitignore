@@ -378,4 +378,9 @@ contexto/
 # Preferencias locais do usuario (configuracoes de UI)
 preferencias.json
 
+# Artefatos de compilação PyInstaller
+build/
+dist/
+packaging/*.spec
+
 
