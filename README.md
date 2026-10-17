@@ -31,7 +31,7 @@ O **Taradutor de Legendas** é uma ferramenta de automação para extração, tr
 
 O projeto é estruturado segundo os princípios de separação de responsabilidades (MVC e Design Patterns):
 
-- **View (`tradutor/interface.py`):** Interface gráfica responsiva desenvolvida com CustomTkinter, com suporte a Drag and Drop (arrastar e soltar arquivos).
+- **View (`tradutor/interface.py`):** Interface gráfica profissional inspirada no layout moderno do LosslessCut (painel lateral de parâmetros, fila com cards dinâmicos por arquivo, dropzone interativa e console de logs retrátil). A versão clássica permanece preservada em `tradutor/interface_classica.py`.
 - **Controller (`tradutor/controlador.py`):** Camada mediadora que processa comandos do usuário e sincroniza eventos entre a interface e as regras de negócio.
 - **Model / Orquestrador (`tradutor/orquestrador.py`):** Gerenciador de pipeline que coordena o fluxo em lote de forma desacoplada da interface gráfica.
 - **Estratégias (`tradutor/estrategias/`):** Aplicação do Strategy Pattern via `FabricaProcessadores`, delegando a lógica especializada para `ProcessadorMkv` ou `ProcessadorSrt`.
