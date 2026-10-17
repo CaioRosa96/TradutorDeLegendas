@@ -1,16 +1,13 @@
+"""View layer: Orquestradora da Interface Grafica Moderna (v2.7.0).
+
+Monta a janela principal e orquestra a comunicacao entre os componentes
+visuais especializados (Header, Sidebar, Fila e Footer) e o ControladorApp.
+"""
+
 import threading
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
-
-try:
-    import winsound
-except ImportError:
-    winsound = None
-
-
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
 
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
@@ -18,178 +15,135 @@ try:
 except ImportError:
     HAS_DND = False
 
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
+from .ui import CORES, HeaderView, SidebarView, PainelFilaView, FooterView
 
 
 class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
-    """View layer: Interface gráfica pura.
-
-    Responsável exclusivamente por renderizar widgets, capturar
-    inputs do usuário e exibir feedback. Toda lógica de negócio
-    é delegada ao Controller.
-    """
+    """View layer: Janela principal e mediadora de eventos da interface visual."""
 
     def __init__(self):
         super().__init__()
         if HAS_DND:
             self.TkdndVersion = TkinterDnD._require(self)
-        self.title("Tradutor Automático de Legendas (MKV/ASS/SRT)")
-        self.geometry("750x550")
+
+        self.title("Taradutor de Legendas — v2.7.0")
+        self.geometry("920x660")
+        self.minsize(860, 600)
+        self.configure(fg_color=CORES["bg_janela"])
 
         self._controller = None
         self.files = []
 
-        self._build_ui()
-        self.protocol("WM_DELETE_WINDOW", self._on_closing_request)
+        self._montar_layout()
 
-    def set_controller(self, controller):
-        """Injeta o controller após construção."""
-        self._controller = controller
-
-    # ── Construção de Widgets ──────────────────────────────────────────────
-
-    def _build_ui(self):
-        self.lbl_title = ctk.CTkLabel(
-            self, text="Tradutor de Legendas", font=("Roboto", 24, "bold")
-        )
-        self.lbl_title.pack(pady=(20, 10))
-
-        # Configura a janela inteira como área de soltar arquivos (Drag & Drop)
         if HAS_DND:
             self.drop_target_register(DND_FILES)
             self.dnd_bind('<<Drop>>', self._on_files_dropped)
-            texto_botao = "Selecionar ou Arrastar Vídeos/Legendas para cá"
-        else:
-            texto_botao = "Selecionar Vídeos ou Legendas"
 
-        self.btn_select = ctk.CTkButton(
-            self, text=texto_botao,
-            command=self._select_files, width=350, height=40, font=("Roboto", 14)
+        self.protocol("WM_DELETE_WINDOW", self._on_closing_request)
+
+    def set_controller(self, controller):
+        """Injeta a referencia do Controller mediador."""
+        self._controller = controller
+
+    # ── 1. Montagem e Composicao dos Componentes ────────────────────────────
+
+    def _montar_layout(self):
+        # 1. Cabecalho Superior
+        self.header = HeaderView(self)
+        self.header.pack(side="top", fill="x")
+
+        # 2. Container Central (Duas Colunas)
+        self.frame_conteudo = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_conteudo.pack(side="top", fill="both", expand=True, padx=14, pady=(12, 0))
+
+        # Coluna Esquerda: Parametros de Traducao
+        self.sidebar = SidebarView(self.frame_conteudo, on_destino_alterado_cb=self._on_destino_alterado)
+        self.sidebar.pack(side="left", fill="y", padx=(0, 12))
+
+        # Coluna Direita: Fila e Cards
+        self.fila = PainelFilaView(
+            self.frame_conteudo,
+            on_add_cb=self._select_files,
+            on_clear_cb=self._limpar_fila,
+            on_remove_item_cb=self._remover_arquivo
         )
-        self.btn_select.pack(pady=10)
+        self.fila.pack(side="left", fill="both", expand=True)
 
-        self.lbl_files = ctk.CTkLabel(
-            self, text="Nenhum arquivo selecionado", text_color="gray"
+        # 3. Rodape de Status, Progresso e Console de Logs
+        self.footer = FooterView(
+            self,
+            on_start_cb=self._on_start_clicked,
+            on_cancel_cb=self._on_cancel_clicked
         )
-        self.lbl_files.pack(pady=5)
+        self.footer.pack(side="bottom", fill="x", pady=(10, 0))
 
-        self._build_options_frame()
-
-        self.progressbar = ctk.CTkProgressBar(self, width=600)
-        self.progressbar.set(0)
-        self.progressbar.pack(pady=10)
-
-        self.textbox = ctk.CTkTextbox(self, width=650, height=250, state="disabled")
-        self.textbox.pack(pady=10)
-
-        self._build_action_buttons()
-
-    def _build_options_frame(self):
-        self.frame_options = ctk.CTkFrame(self)
-        self.frame_options.pack(pady=10, padx=20)
-
-        ctk.CTkLabel(
-            self.frame_options, text="Idioma Preferido p/ MKV (ex: eng, jpn):"
-        ).pack(side="left", padx=(10, 5), pady=5)
-
-        self.combo_lang = ctk.CTkOptionMenu(self.frame_options, values=["auto"], width=100)
-        self.combo_lang.pack(side="left", padx=(0, 10), pady=5)
-
-        ctk.CTkLabel(
-            self.frame_options, text="Destino:"
-        ).pack(side="left", padx=(10, 5), pady=5)
-
-        self.combo_lang_dest = ctk.CTkOptionMenu(
-            self.frame_options, 
-            values=["pt", "en", "es", "fr", "de", "it", "ru", "ja", "ko", "zh-cn"], 
-            width=80
-        )
-        self.combo_lang_dest.pack(side="left", padx=(0, 10), pady=5)
-
-        self.var_manter_legenda = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
-            self.frame_options, text="Manter legenda externa",
-            variable=self.var_manter_legenda
-        ).pack(side="left", padx=(10, 0), pady=5)
-
-    def _build_action_buttons(self):
-        self.frame_botoes = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame_botoes.pack(pady=10)
-
-        self.btn_run = ctk.CTkButton(
-            self.frame_botoes, text="INICIAR TRADUÇÃO",
-            command=self._on_start_clicked, state="disabled",
-            fg_color="green", hover_color="darkgreen", width=250
-        )
-        self.btn_run.pack(side="left", padx=5)
-
-        self.btn_cancelar = ctk.CTkButton(
-            self.frame_botoes, text="✖ Cancelar",
-            command=self._on_cancel_clicked,
-            fg_color="#c0392b", hover_color="#96281b", width=120
-        )
-
-        self.btn_novos = ctk.CTkButton(
-            self.frame_botoes, text="🔄 Traduzir Outros Arquivos",
-            command=self._voltar_para_selecao,
-            fg_color="#2980b9", hover_color="#1f6da0", width=220
-        )
-        self.btn_encerrar = ctk.CTkButton(
-            self.frame_botoes, text="✖ Encerrar Aplicativo",
-            command=self._on_closing_request,
-            fg_color="#c0392b", hover_color="#96281b", width=220
-        )
-
-    # ── Ações do Usuário ──────────────────────────────────────────────────
+    # ── 2. Gerenciamento de Arquivos e Fila ──────────────────────────────────
 
     def _select_files(self):
         files = filedialog.askopenfilenames(
-            title="Selecione os vídeos MKV ou arquivos de legenda",
+            title="Selecione os videos MKV ou arquivos de legenda",
             filetypes=[
                 ("Todos Suportados", "*.mkv *.ass *.srt *.txt"),
-                ("Vídeo MKV", "*.mkv"),
+                ("Video MKV", "*.mkv"),
                 ("Legenda", "*.ass *.srt *.txt")
             ]
         )
         if files:
-            self.files = files
-            self.lbl_files.configure(
-                text=f"{len(self.files)} arquivo(s) selecionado(s)", text_color="white"
-            )
-            self.btn_run.configure(state="normal")
-            if self._controller:
-                self._controller.on_files_selected(self.files)
+            novos = [f for f in files if f not in self.files]
+            self.files.extend(novos)
+            self._sincronizar_fila()
 
     def _on_files_dropped(self, event):
-        """Callback executado quando o usuário arrasta e solta arquivos."""
         if not HAS_DND:
             return
-            
         arquivos = self.tk.splitlist(event.data)
         extensoes_validas = ('.mkv', '.ass', '.srt', '.txt')
-        arquivos_validos = [f for f in arquivos if f.lower().endswith(extensoes_validas)]
-        
-        if arquivos_validos:
-            self.files = arquivos_validos
-            self.lbl_files.configure(
-                text=f"{len(self.files)} arquivo(s) arrastado(s)", text_color="#f39c12"
-            )
-            self.btn_run.configure(state="normal")
-            if self._controller:
-                self._controller.on_files_selected(self.files)
+        validos = [f for f in arquivos if f.lower().endswith(extensoes_validas) and f not in self.files]
+        if validos:
+            self.files.extend(validos)
+            self._sincronizar_fila()
         else:
-            messagebox.showwarning("Aviso", "Nenhum arquivo válido suportado (MKV/ASS/SRT).")
+            messagebox.showwarning("Aviso", "Nenhum arquivo valido suportado (MKV/ASS/SRT/TXT).")
+
+    def _remover_arquivo(self, caminho: str):
+        if caminho in self.files:
+            self.files.remove(caminho)
+            self._sincronizar_fila()
+
+    def _limpar_fila(self):
+        self.files.clear()
+        self._sincronizar_fila()
+
+    def _on_destino_alterado(self, novo_destino: str):
+        self.fila.atualizar_destinos(novo_destino)
+
+    def _sincronizar_fila(self):
+        self.fila.renderizar_fila(self.files, self.sidebar.idioma_destino)
+        self.footer.configurar_modo_pronto(len(self.files) > 0)
+        if self._controller:
+            self._controller.on_files_selected(self.files)
+
+    # ── 3. Acoes do Usuario delegadas ao Controller ─────────────────────────
 
     def _on_start_clicked(self):
-        if self._controller:
-            idioma_origem = self.combo_lang.get().strip()
-            idioma_destino = self.combo_lang_dest.get().strip()
-            manter = self.var_manter_legenda.get()
-            self._controller.start_translation(self.files, idioma_origem, idioma_destino, manter)
+        if self._controller and self.files:
+            self._controller.start_translation(
+                self.files,
+                self.sidebar.idioma_origem,
+                self.sidebar.idioma_destino,
+                self.sidebar.manter_legenda
+            )
 
     def _on_cancel_clicked(self):
         if self._controller:
             self._controller.cancel_translation()
-            self.btn_cancelar.configure(state="disabled", text="Cancelando...")
+            self.footer.configurar_modo_cancelando()
 
     def _on_closing_request(self):
         if self._controller:
@@ -197,92 +151,56 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         else:
             self.destroy()
 
-    # ── Métodos Públicos (chamados pelo Controller/Model via callbacks) ────
+    # ── 4. Callbacks Publicos (Contrato do Controller/Model) ────────────────
 
     def prepare_for_processing(self):
-        """Prepara a UI para o início do processamento."""
-        self.btn_run.pack_forget()
-        self.btn_cancelar.configure(state="normal", text="✖ Cancelar")
-        self.btn_cancelar.pack(side="left", padx=5)
-        self.btn_select.configure(state="disabled")
-        self.progressbar.set(0)
-        self.textbox.configure(state="normal")
-        self.textbox.delete("0.0", "end")
-        self.textbox.configure(state="disabled")
+        """Prepara a interface para o inicio da traducao."""
+        self.footer.configurar_modo_execucao()
+        self.fila.set_interativo(False)
 
-    def update_language_options(self, langs):
-        """Atualiza a lista de idiomas após varredura dos MKVs."""
-        def _update():
-            opcoes = ["auto"] + langs
-            self.combo_lang.configure(values=opcoes)
-            if len(langs) == 1:
-                self.combo_lang.set(langs[0])
-            else:
-                self.combo_lang.set("auto")
-        self.after(0, _update)
+    def update_language_options(self, langs: list):
+        """Atualiza a lista de idiomas disponiveis detectados nos MKVs."""
+        opcoes = ["auto"] + langs
+        valor_padrao = langs[0] if len(langs) == 1 else "auto"
+        self.after(0, lambda: self.sidebar.atualizar_opcoes_origem(opcoes, valor_padrao))
 
-    def log(self, msg):
-        """Adiciona uma mensagem ao log da interface (thread-safe)."""
-        def _update():
-            self.textbox.configure(state="normal")
-            self.textbox.insert("end", str(msg) + "\n")
-            self.textbox.see("end")
-            self.textbox.configure(state="disabled")
-        self.after(0, _update)
+    def log(self, msg: str):
+        """Grava no console interno e atualiza status inline (thread-safe)."""
+        def _atualizar():
+            self.footer.escrever_log(msg)
+            self.footer.set_status(msg)
+        self.after(0, _atualizar)
 
-    def update_progress(self, current, total):
-        """Atualiza a barra de progresso (thread-safe)."""
-        if total > 0:
-            self.after(0, lambda: self.progressbar.set(current / total))
+    def update_progress(self, current: int, total: int):
+        """Atualiza barra de progresso e porcentagem (thread-safe)."""
+        self.after(0, lambda: self.footer.set_progresso(current, total))
 
-    def ask_overwrite(self, nomes_arquivos):
-        """Pergunta ao usuário se deseja sobrescrever arquivos existentes (thread-safe)."""
+    def ask_overwrite(self, nomes_arquivos: str) -> bool:
+        """Exibe confirmacao modal de sobrescrita de forma thread-safe."""
         evento = threading.Event()
         resposta = [False]
 
-        def _ask():
+        def _perguntar():
             r = messagebox.askyesno(
-                "Arquivo já existe",
-                f"O(s) arquivo(s) abaixo já existe(m):\n\n{nomes_arquivos}\n\nDeseja sobrescrever?"
+                "Arquivo ja existe",
+                f"O(s) arquivo(s) abaixo ja existe(m):\n\n{nomes_arquivos}\n\nDeseja sobrescrever?"
             )
             resposta[0] = r
             evento.set()
 
-        self.after(0, _ask)
+        self.after(0, _perguntar)
         evento.wait()
         return resposta[0]
 
     def on_processing_finished(self):
-        """Atualiza a UI após o término do processamento."""
-        def _update_ui():
-            self.btn_run.pack_forget()
-            self.btn_cancelar.pack_forget()
-            self.btn_novos.pack(side="left", padx=10)
-            self.btn_encerrar.pack(side="left", padx=10)
-            self.btn_select.configure(state="normal")
-            self.files = []
-            self.lbl_files.configure(
-                text="✅ Concluído! Escolha uma opção abaixo.", text_color="#2ecc71"
-            )
+        """Restaura controles e notifica usuario ao concluir."""
+        def _finalizar():
+            self.footer.configurar_modo_pronto(len(self.files) > 0)
+            self.fila.set_interativo(True)
+            self.footer.set_status("Processamento concluido com sucesso!")
             if winsound:
                 try:
                     winsound.MessageBeep(winsound.MB_ICONASTERISK)
                 except Exception:
                     pass
-        self.after(0, _update_ui)
-
-    def _voltar_para_selecao(self):
-        """Reseta a interface para o estado inicial e abre o seletor de arquivos."""
-        self.btn_novos.pack_forget()
-        self.btn_encerrar.pack_forget()
-        self.btn_cancelar.pack_forget()
-        self.btn_run.pack(side="left", padx=5)
-        self.btn_run.configure(state="disabled")
-        self.lbl_files.configure(text="Nenhum arquivo selecionado", text_color="gray")
-        self.progressbar.set(0)
-        self.combo_lang.configure(values=["auto"])
-        self.combo_lang.set("auto")
-        self.textbox.configure(state="normal")
-        self.textbox.delete("0.0", "end")
-        self.textbox.configure(state="disabled")
-        self._select_files()
+        self.after(0, _finalizar)
