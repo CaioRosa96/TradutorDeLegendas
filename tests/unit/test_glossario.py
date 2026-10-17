@@ -79,3 +79,22 @@ def test_remove_shield_resiliencia_ao_google(gerenciador_mock):
     texto_restaurado = gerenciador_mock.remove_shield(texto_maltratado_pelo_google, mapping)
     
     assert texto_restaurado == "O A Força é forte com Goku em Hogwarts."
+
+
+def test_apply_e_remove_shield_tags_ass_e_html(gerenciador_mock):
+    """Verifica se tags ASS (como {\\an8}, {\\i1}) e HTML (<i>) são mascaradas e restauradas com precisão."""
+    texto_com_tags = r"{\an8}Olá mundo! <i>Goku</i> {\c&H00FFFF&}atacou!"
+    protegido, mapping = gerenciador_mock.apply_shield(texto_com_tags)
+
+    # Nenhuma tag original deve estar no texto protegido
+    assert r"{\an8}" not in protegido
+    assert "<i>" not in protegido
+    assert r"{\c&H00FFFF&}" not in protegido
+
+    # A restauração devolve as tags originais com integridade
+    restaurado = gerenciador_mock.remove_shield(protegido, mapping)
+    assert r"{\an8}" in restaurado
+    assert "<i>" in restaurado
+    assert r"{\c&H00FFFF&}" in restaurado
+    assert "Goku" in restaurado
+
