@@ -1,6 +1,7 @@
 import os
 import re
 from .config import GerenciadorConfig
+from .contratos import LinhaProtegida
 
 class GerenciadorGlossario:
     """Gerenciador do Dicionário Anti-Tradução (Glossário).
@@ -140,4 +141,22 @@ class GerenciadorGlossario:
         final_text = '\n'.join(linhas)
         final_text = re.sub(r'(\{[^}\n]+\})[ \t]+', r'\1', final_text)
         return final_text
+
+    def proteger(self, texto: str, id_linha: int = 0) -> LinhaProtegida:
+        """Aplica o escudo e devolve um Value Object imutável vinculado ao id da linha.
+
+        Delega integralmente para `apply_shield`, preservando o texto mascarado
+        usado como chave do cache SQLite.
+        """
+        texto_mascarado, mapa_tokens = self.apply_shield(texto)
+        return LinhaProtegida(
+            id_linha=id_linha,
+            texto_original=texto,
+            texto_mascarado=texto_mascarado,
+            mapa_tokens=mapa_tokens,
+        )
+
+    def restaurar(self, texto_traduzido: str, payload: LinhaProtegida) -> str:
+        """Restaura os tokens do payload no texto devolvido pelo motor de tradução."""
+        return self.remove_shield(texto_traduzido, payload.mapa_tokens)
 

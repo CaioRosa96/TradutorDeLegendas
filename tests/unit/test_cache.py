@@ -109,3 +109,66 @@ def test_metricas_e_limpeza_cache(cache_temporario):
     assert cache_temporario.contar_traducoes() == 0
 
 
+def test_put_many_e_get_many_chunked(cache_temporario):
+    """Testa inserção e recuperação em lote ultrapassando o limite de 500 parâmetros."""
+    # Gera 550 itens para garantir teste do fatiamento em chunks
+    total = 550
+    itens = [(f"Text {i}", "en", "pt", f"Texto {i}") for i in range(total)]
+    cache_temporario.put_many(itens)
+
+    assert cache_temporario.contar_traducoes() == total
+
+    # Recupera todos os 550 via get_many (deve fatiar em 500 + 50)
+    textos_busca = [f"Text {i}" for i in range(total)]
+    recuperados = cache_temporario.get_many(textos_busca, "en", "pt")
+    assert len(recuperados) == total
+    assert recuperados["Text 0"] == "Texto 0"
+    assert recuperados[f"Text {total - 1}"] == f"Texto {total - 1}"
+
+
+def test_salvar_lote_com_mapping_e_lista(cache_temporario):
+    """Testa salvar_lote usando dicionário e usando lista de tuplas."""
+    mapa = {"Hello": "Olá", "World": "Mundo"}
+    cache_temporario.salvar_lote(mapa, src_lang="en", dest_lang="pt")
+
+    assert cache_temporario.get("Hello", "en", "pt") == "Olá"
+    assert cache_temporario.get("World", "en", "pt") == "Mundo"
+
+    lista_tuplas = [("Bye", "en", "pt", "Adeus")]
+    cache_temporario.salvar_lote(lista_tuplas)
+    assert cache_temporario.get("Bye", "en", "pt") == "Adeus"
+
+
+def test_concorrencia_alta_20_threads_lote_sem_lock(cache_temporario):
+    """Simula 20 threads simultâneas lendo e escrevendo em lote no SQLite com modo WAL.
+    
+    Garante zero ocorrências de 'sqlite3.OperationalError: database is locked'.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def trabalhador(thread_id: int):
+        lote = [(f"Thread_{thread_id}_Item_{i}", "en", "pt", f"Trad_{thread_id}_{i}") for i in range(50)]
+        cache_temporario.put_many(lote)
+        textos = [f"Thread_{thread_id}_Item_{i}" for i in range(50)]
+        recuperados = cache_temporario.get_many(textos, "en", "pt")
+        assert len(recuperados) == 50
+        assert recuperados[f"Thread_{thread_id}_Item_0"] == f"Trad_{thread_id}_0"
+        assert recuperados[f"Thread_{thread_id}_Item_49"] == f"Trad_{thread_id}_49"
+
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futuros = [executor.submit(trabalhador, t) for t in range(20)]
+        for f in futuros:
+            f.result()
+
+    assert cache_temporario.contar_traducoes() == 20 * 50
+
+
+def test_cache_satisfaz_contrato_cache_traducao_port(cache_temporario):
+    """Verifica se CacheTraducoes e RepositorioCacheSqlite satisfazem CacheTraducaoPort."""
+    from tradutor.contratos import CacheTraducaoPort
+    from tradutor.cache import RepositorioCacheSqlite
+
+    assert isinstance(cache_temporario, CacheTraducaoPort)
+    assert RepositorioCacheSqlite is CacheTraducoes
+
+

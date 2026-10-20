@@ -2,13 +2,16 @@ import pytest
 import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
+from tradutor.config import GerenciadorConfig
+from tradutor.contratos import LinhaProtegida
 from tradutor.servico_traducao import ServicoTraducao
+from tradutor.tradutores.base import ExcecaoDisjuntorAberto
 
 class EventoLegendaDummy:
     """Mock básico para simular eventos de legenda do pysubs2."""
@@ -25,6 +28,7 @@ def servico_setup(mocker):
     """
     mocker.patch('tradutor.servico_traducao.CacheTraducoes')
     mocker.patch('tradutor.servico_traducao.GerenciadorGlossario')
+    mocker.patch.object(GerenciadorConfig, 'PAUSA_FALLBACK_SEGUNDOS', 0)
     
     mock_logger = MagicMock()
     mock_progress = MagicMock()
@@ -37,9 +41,11 @@ def servico_setup(mocker):
         video_filename="fake_video.mkv"
     )
     
-    # Mockando o comportamento padrão do glossario injetado
-    servico._glossary.apply_shield.side_effect = lambda text: (text, {})
-    servico._glossary.remove_shield.side_effect = lambda text, map: text
+    # Escudo neutro: devolve o texto sem tokens e restaura sem alterações
+    servico._glossary.proteger.side_effect = lambda texto, id_linha=0: LinhaProtegida(
+        id_linha=id_linha, texto_original=texto, texto_mascarado=texto
+    )
+    servico._glossary.restaurar.side_effect = lambda texto, payload: texto
     
     # Mockando o comportamento do cache
     servico._cache.get.return_value = None
@@ -184,4 +190,145 @@ async def test_traduzir_lote_preserva_linhas_vazias_sem_fallback(servico_setup):
     assert subs[0].text == "Linha 1"
     assert subs[1].text == ""
     assert subs[2].text == "Linha 3"
+
+
+async def _executar_lote(servico, subs):
+    """Executa um lote único cobrindo todos os eventos fornecidos."""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        await servico._traduzir_lote(
+            executor, asyncio.Semaphore(1), list(range(len(subs))), subs, threading.Lock()
+        )
+
+
+@pytest.mark.asyncio
+async def test_fallback_falha_isolada_preserva_linhas_vizinhas(servico_setup):
+    """
+    Uma falha em uma única linha do fallback não pode descartar as traduções
+    já obtidas para as linhas anteriores nem impedir as seguintes.
+    Antes da Fase 2, a exceção revertia o lote inteiro para o texto original.
+    """
+    servico, mock_engine, mock_logger, _ = servico_setup
+    mock_engine.translate.side_effect = [
+        "Lote dessincronizado",
+        "Linha 1 fallback",
+        TimeoutError("Timeout na linha 2"),
+        "Linha 3 fallback",
+    ]
+    subs = [EventoLegendaDummy("Line 1"), EventoLegendaDummy("Line 2"), EventoLegendaDummy("Line 3")]
+
+    await _executar_lote(servico, subs)
+
+    assert mock_engine.translate.call_count == 4
+    assert [s.text for s in subs] == ["Linha 1 fallback", "Line 2", "Linha 3 fallback"]
+    logs = [c.args[0] for c in mock_logger.call_args_list]
+    assert not any("[Erro Crítico]" in log for log in logs)
+
+
+@pytest.mark.asyncio
+async def test_fallback_interrompe_quando_disjuntor_abre(servico_setup):
+    """Com o disjuntor aberto, as linhas restantes não são enviadas e mantêm o original."""
+    servico, mock_engine, _, _ = servico_setup
+    mock_engine.translate.side_effect = [
+        "Lote dessincronizado",
+        "Linha 1 fallback",
+        ExcecaoDisjuntorAberto("Circuit Breaker ABERTO"),
+    ]
+    subs = [EventoLegendaDummy("Line 1"), EventoLegendaDummy("Line 2"), EventoLegendaDummy("Line 3")]
+
+    await _executar_lote(servico, subs)
+
+    assert mock_engine.translate.call_count == 3
+    assert [s.text for s in subs] == ["Linha 1 fallback", "Line 2", "Line 3"]
+    assert subs[-1].text == "Line 3"
+
+
+@pytest.mark.asyncio
+async def test_fallback_disjuntor_aberto_na_primeira_linha_limpa_todas_as_restantes(servico_setup):
+    """Quando o disjuntor abre logo na primeira linha do fallback, todas as linhas restantes
+    do lote, inclusive a última, devem ter suas quebras limpas deterministicamente."""
+    servico, mock_engine, _, _ = servico_setup
+    mock_engine.translate.side_effect = [
+        "Lote dessincronizado",
+        ExcecaoDisjuntorAberto("Circuit Breaker ABERTO"),
+    ]
+    subs = [
+        EventoLegendaDummy(r"Line 1 \ N com espaco"),
+        EventoLegendaDummy(r"Line 2 \ n outro"),
+        EventoLegendaDummy(r"Line 3 \ N ultima linha"),
+    ]
+
+    await _executar_lote(servico, subs)
+
+    assert mock_engine.translate.call_count == 2
+    assert subs[0].text == r"Line 1\Ncom espaco"
+    assert subs[1].text == r"Line 2\noutro"
+    assert subs[2].text == r"Line 3\Nultima linha"
+    assert subs[-1].text == r"Line 3\Nultima linha"
+
+
+@pytest.mark.asyncio
+async def test_fallback_respeita_cancelamento(servico_setup):
+    """Após o cancelamento, nenhuma nova linha é enviada ao motor."""
+    servico, mock_engine, _, _ = servico_setup
+    chamadas = {"n": 0}
+
+    def traduzir(texto, src, dest):
+        chamadas["n"] += 1
+        return "Lote dessincronizado" if chamadas["n"] == 1 else f"{texto} traduzida"
+
+    mock_engine.translate.side_effect = traduzir
+    servico._is_cancelled = lambda: chamadas["n"] >= 2
+    subs = [EventoLegendaDummy("Line 1"), EventoLegendaDummy("Line 2"), EventoLegendaDummy("Line 3")]
+
+    await _executar_lote(servico, subs)
+
+    assert mock_engine.translate.call_count == 2
+    assert [s.text for s in subs] == ["Line 1 traduzida", "Line 2", "Line 3"]
+
+
+@pytest.mark.asyncio
+async def test_fallback_aplica_pausa_anti_rate_limit(servico_setup, mocker):
+    """Cada linha do fallback é seguida da pausa configurada (AGENTS.md §5.4)."""
+    servico, mock_engine, _, _ = servico_setup
+    mocker.patch.object(GerenciadorConfig, 'PAUSA_FALLBACK_SEGUNDOS', 0.5)
+    pausa = mocker.patch('tradutor.servico_traducao.asyncio.sleep', new_callable=AsyncMock)
+    mock_engine.translate.side_effect = ["Lote dessincronizado", "A", "B"]
+    subs = [EventoLegendaDummy("Line 1"), EventoLegendaDummy("Line 2")]
+
+    await _executar_lote(servico, subs)
+
+    assert pausa.await_args_list == [call(0.5), call(0.5)]
+
+
+@pytest.mark.asyncio
+async def test_progresso_reporta_lote_inteiro_apos_fallback(servico_setup):
+    servico, mock_engine, _, mock_progress = servico_setup
+    mock_engine.translate.side_effect = ["Lote dessincronizado", "A", "B", "C"]
+    subs = [EventoLegendaDummy("1"), EventoLegendaDummy("2"), EventoLegendaDummy("3")]
+
+    await _executar_lote(servico, subs)
+
+    mock_progress.assert_called_once_with(3, 0)
+
+
+@pytest.mark.asyncio
+async def test_chave_de_cache_usa_texto_mascarado_do_bloco(servico_setup):
+    """A chave do cache deve continuar sendo o bloco unido por \\n e já mascarado."""
+    servico, mock_engine, _, _ = servico_setup
+    servico._glossary.proteger.side_effect = lambda texto, id_linha=0: LinhaProtegida(
+        id_linha=id_linha, texto_original=texto, texto_mascarado=f"<{texto}>"
+    )
+    servico._glossary.restaurar.side_effect = lambda texto, payload: texto.strip("<>")
+    mock_engine.translate.return_value = "<X\nY>"
+    subs = [EventoLegendaDummy("A"), EventoLegendaDummy("B")]
+
+    await _executar_lote(servico, subs)
+
+    servico._cache.get.assert_called_once_with("<A\nB>", "auto", "pt")
+    servico._cache.put.assert_called_once_with("<A\nB>", "auto", "pt", "<X\nY>")
+    assert [s.text for s in subs] == ["X", "Y"]
+
+
+def test_pausa_padrao_do_fallback_respeita_rate_limit():
+    assert GerenciadorConfig.PAUSA_FALLBACK_SEGUNDOS == 0.5
 

@@ -1,5 +1,11 @@
 from abc import ABC, abstractmethod
 
+
+class ExcecaoDisjuntorAberto(Exception):
+    """Exceção lançada quando o Circuit Breaker está aberto para evitar banimento de IP."""
+    pass
+
+
 class ITradutor(ABC):
     """
     Interface abstrata (Contrato) para todos os motores de tradução.
