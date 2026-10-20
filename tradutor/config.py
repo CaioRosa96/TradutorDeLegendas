@@ -8,6 +8,7 @@ class GerenciadorConfig:
     TAMANHO_LOTE = 40
     MAX_CONCORRENTE = 5
     MAX_RETENTATIVAS = 3
+    PAUSA_FALLBACK_SEGUNDOS = 0.5
 
     # Diretório onde o executável ou script está rodando (para dados persistentes)
     DIRETORIO_EXECUCAO = (

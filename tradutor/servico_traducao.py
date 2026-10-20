@@ -11,6 +11,8 @@ from .config import GerenciadorConfig
 from .glossario import GerenciadorGlossario
 from .idiomas import Idiomas
 from .cache import CacheTraducoes
+from .contratos import LinhaProtegida, ResultadoTraducaoLinha
+from .tradutores import ExcecaoDisjuntorAberto
 
 
 class ServicoTraducao:
@@ -59,7 +61,8 @@ class ServicoTraducao:
             textos_preparados.append(texto)
 
         bloco = "\n".join(textos_preparados)
-        bloco_protegido, mapeamento = self._glossary.apply_shield(bloco)
+        payload_bloco = self._glossary.proteger(bloco, id_linha=0)
+        bloco_protegido = payload_bloco.texto_mascarado
 
         async with semaforo:
             if self._is_cancelled():
@@ -74,7 +77,7 @@ class ServicoTraducao:
                     # 3. Salva no Cache
                     self._cache.put(bloco_protegido, src_lang, dest_lang, traduzido)
                     
-                traduzido_restaurado = self._glossary.remove_shield(traduzido, mapeamento)
+                traduzido_restaurado = self._glossary.restaurar(traduzido, payload_bloco)
                 
                 linhas_retornadas = traduzido_restaurado.split("\n")
                 if len(linhas_retornadas) == len(lote_indices) + 1 and not linhas_retornadas[-1].strip():
@@ -87,19 +90,38 @@ class ServicoTraducao:
                         subs[idx].text = frases_limpas[i]
                 else:
                     self._logger("[Aviso] Dessincronia no lote. Executando fallback sequencial...")
-                    for idx, texto in zip(lote_indices, textos_preparados):
+                    for pos, (idx, texto) in enumerate(zip(lote_indices, textos_preparados)):
                         if self._is_cancelled():
+                            for rem_idx, rem_texto in zip(lote_indices[pos:], textos_preparados[pos:]):
+                                subs[rem_idx].text = self._limpar_quebras(rem_texto)
                             break
-                        texto_protegido, map_seq = self._glossary.apply_shield(texto)
+
+                        payload_linha = self._glossary.proteger(texto, id_linha=idx)
+                        texto_protegido = payload_linha.texto_mascarado
+
                         r = self._cache.get(texto_protegido, src_lang, dest_lang)
                         if not r:
-                            r = await loop.run_in_executor(executor, self._engine.translate, texto_protegido, src_lang, dest_lang)
-                            self._cache.put(texto_protegido, src_lang, dest_lang, r)
-                        r_restaurado = self._glossary.remove_shield(r, map_seq)
+                            try:
+                                r = await loop.run_in_executor(
+                                    executor, self._engine.translate, texto_protegido, src_lang, dest_lang
+                                )
+                                self._cache.put(texto_protegido, src_lang, dest_lang, r)
+                            except ExcecaoDisjuntorAberto:
+                                for rem_idx, rem_texto in zip(lote_indices[pos:], textos_preparados[pos:]):
+                                    subs[rem_idx].text = self._limpar_quebras(rem_texto)
+                                break
+                            except Exception:
+                                subs[idx].text = self._limpar_quebras(texto)
+                                continue
+
+                        r_restaurado = self._glossary.restaurar(r, payload_linha)
                         subs[idx].text = self._limpar_quebras(r_restaurado)
                         if self._is_cancelled():
+                            for rem_idx, rem_texto in zip(lote_indices[pos + 1:], textos_preparados[pos + 1:]):
+                                subs[rem_idx].text = self._limpar_quebras(rem_texto)
                             break
-                        await asyncio.sleep(0.5)
+                        pausa = getattr(GerenciadorConfig, "PAUSA_FALLBACK_SEGUNDOS", 0.5)
+                        await asyncio.sleep(pausa)
             except Exception as e:
                 self._logger(f"[Erro Crítico] Lote ignorado. Motivo: {e}")
                 for i, idx in enumerate(lote_indices):

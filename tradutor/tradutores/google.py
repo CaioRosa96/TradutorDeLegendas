@@ -1,16 +1,13 @@
 import threading
 import time
 from googletrans import Translator
-from .base import ITradutor
+from .base import ITradutor, ExcecaoDisjuntorAberto
 from ..logger import app_logger
-
-class ExcecaoDisjuntorAberto(Exception):
-    pass
 
 class MotorTraducaoGoogle(ITradutor):
     """
     Implementação Concreta para a API do Google Translate.
-    Encapsula rate-limits, retentativas e possui Circuit Breaker:
+    Encapsula rate-limits, retentativas e possui Circuit Breaker thread-safe:
     se falhar 5 vezes seguidas, para de tentar por 60 segundos
     para evitar banimentos permanentes ou travamentos da thread.
     """
@@ -18,6 +15,7 @@ class MotorTraducaoGoogle(ITradutor):
     def __init__(self, max_retries=3, failure_threshold=5, recovery_timeout=60):
         self._engine = Translator()
         self._max_retries = max_retries
+        self._lock = threading.Lock()
         
         # Estado do Circuit Breaker
         self._failure_count = 0
@@ -27,25 +25,37 @@ class MotorTraducaoGoogle(ITradutor):
         self._is_open = False
 
     def _check_circuit(self):
-        if self._is_open:
-            if time.time() - self._last_failure_time > self._recovery_timeout:
-                app_logger.info("Circuit Breaker: Testando recuperação da API (Half-Open).")
-                self._is_open = False
-            else:
-                raise ExcecaoDisjuntorAberto("Circuit Breaker ABERTO: Abortando para evitar banimentos.")
+        deve_logar_half_open = False
+        with self._lock:
+            if self._is_open:
+                if time.time() - self._last_failure_time > self._recovery_timeout:
+                    self._is_open = False
+                    deve_logar_half_open = True
+                else:
+                    raise ExcecaoDisjuntorAberto("Circuit Breaker ABERTO: Abortando para evitar banimentos.")
+        if deve_logar_half_open:
+            app_logger.info("Circuit Breaker: Testando recuperação da API (Half-Open).")
 
     def _record_failure(self):
-        self._failure_count += 1
-        self._last_failure_time = time.time()
-        if self._failure_count >= self._failure_threshold:
-            self._is_open = True
+        deve_logar_erro = False
+        with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.time()
+            if self._failure_count >= self._failure_threshold:
+                self._is_open = True
+                deve_logar_erro = True
+        if deve_logar_erro:
             app_logger.error(f"Circuit Breaker disparado! Atingiu {self._failure_threshold} falhas seguidas.")
 
     def _record_success(self):
-        if self._failure_count > 0:
+        deve_logar_recuperacao = False
+        with self._lock:
+            if self._failure_count > 0:
+                deve_logar_recuperacao = True
+            self._failure_count = 0
+            self._is_open = False
+        if deve_logar_recuperacao:
             app_logger.info("Circuit Breaker: Conexão estabilizada. Resetando falhas.")
-        self._failure_count = 0
-        self._is_open = False
 
     def translate(self, text: str, src_lang: str, dest_lang: str) -> str:
         self._check_circuit()
