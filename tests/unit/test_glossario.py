@@ -98,3 +98,16 @@ def test_apply_e_remove_shield_tags_ass_e_html(gerenciador_mock):
     assert r"{\c&H00FFFF&}" in restaurado
     assert "Goku" in restaurado
 
+
+def test_apply_shield_termos_com_pontuacao_final(gerenciador_mock):
+    """Termos terminados em pontuação (ex: 'U.A.') devem ser protegidos mesmo antes de '!' ou espaço."""
+    gerenciador_mock.glossario_map["U.A."] = "U.A."
+    frase = "Bem-vindos à U.A.! Vamos para a U.A. agora."
+
+    protegido, mapping = gerenciador_mock.apply_shield(frase)
+
+    assert "U.A." not in protegido
+    assert "TKGLOSS" in protegido
+    restaurado = gerenciador_mock.remove_shield(protegido, mapping)
+    assert restaurado == frase
+

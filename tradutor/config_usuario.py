@@ -16,7 +16,8 @@ class PreferenciasUsuario:
         "tocar_som": True,
         "abrir_pasta_ao_concluir": False,
         "politica_sobrescrita": "perguntar",  # "perguntar", "sobrescrever", "pular"
-        "mkvtoolnix_custom": ""
+        "mkvtoolnix_custom": "",
+        "auto_alimentar_anilist": True
     }
 
     _dados = None

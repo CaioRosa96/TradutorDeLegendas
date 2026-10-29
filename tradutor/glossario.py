@@ -110,7 +110,7 @@ class GerenciadorGlossario:
         
         for key in sorted_keys:
             escaped_key = re.escape(key)
-            pattern = re.compile(rf'(?i)\b{escaped_key}\b')
+            pattern = re.compile(rf'(?i)(?<!\w){escaped_key}(?!\w)')
             
             def repl(match):
                 nonlocal counter
@@ -140,6 +140,7 @@ class GerenciadorGlossario:
         linhas = [re.sub(r'[ \t]+', ' ', linha).strip() for linha in final_text.split('\n')]
         final_text = '\n'.join(linhas)
         final_text = re.sub(r'(\{[^}\n]+\})[ \t]+', r'\1', final_text)
+        final_text = re.sub(r'[ \t]+([!?,;:])', r'\1', final_text)
         return final_text
 
     def proteger(self, texto: str, id_linha: int = 0) -> LinhaProtegida:

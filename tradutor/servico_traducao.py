@@ -22,13 +22,30 @@ class ServicoTraducao:
     quando a API retorna quantidade inconsistente de linhas.
     """
 
-    def __init__(self, logger, progress_callback, is_cancelled_callback=None, engine=None, video_filename=None):
+    def __init__(
+        self,
+        logger,
+        progress_callback,
+        is_cancelled_callback=None,
+        engine=None,
+        video_filename=None,
+        habilitar_auto_alimentar=None,
+    ):
         self._logger = logger
         self._progress_callback = progress_callback
         self._is_cancelled = is_cancelled_callback or (lambda: False)
         self._linhas_processadas = 0
         self._total_linhas = 0
-        self._glossary = GerenciadorGlossario(video_filename=video_filename)
+        if habilitar_auto_alimentar is None:
+            try:
+                from .config_usuario import PreferenciasUsuario
+                habilitar_auto_alimentar = bool(PreferenciasUsuario.obter("auto_alimentar_anilist", True))
+            except Exception:
+                habilitar_auto_alimentar = False
+        self._glossary = GerenciadorGlossario(
+            video_filename=video_filename,
+            habilitar_auto_alimentar=habilitar_auto_alimentar,
+        )
         self._cache = CacheTraducoes()
         
         if engine is None:
@@ -68,10 +85,32 @@ class ServicoTraducao:
             if self._is_cancelled():
                 return
             try:
-                # 1. Busca no Cache Local
+                # 1. Busca no Cache Local (Nível 1: Bloco Inteiro)
                 traduzido = self._cache.get(bloco_protegido, src_lang, dest_lang)
                 
                 if not traduzido:
+                    # Nível 2: Verifica se todas as linhas já estão cacheadas individualmente via get_many
+                    payloads_linhas = [
+                        self._glossary.proteger(t, id_linha=idx)
+                        for idx, t in zip(lote_indices, textos_preparados)
+                    ]
+                    chaves_linhas = [p.texto_mascarado for p in payloads_linhas]
+                    cache_parcial = getattr(self._cache, "get_many", lambda *_: {})(
+                        chaves_linhas, src_lang, dest_lang
+                    )
+                    if not isinstance(cache_parcial, dict):
+                        cache_parcial = {}
+
+                    if cache_parcial and len(cache_parcial) == len(chaves_linhas):
+                        for idx, p_linha in zip(lote_indices, payloads_linhas):
+                            r_cached = cache_parcial[p_linha.texto_mascarado]
+                            r_rest = self._glossary.restaurar(r_cached, p_linha)
+                            subs[idx].text = self._limpar_quebras(r_rest.strip())
+                        with pbar_lock:
+                            self._linhas_processadas += len(lote_indices)
+                            self._progress_callback(self._linhas_processadas, self._total_linhas)
+                        return
+
                     # 2. Se não existir, vai na Rede via Engine injetada
                     traduzido = await loop.run_in_executor(executor, self._engine.translate, bloco_protegido, src_lang, dest_lang)
                     # 3. Salva no Cache

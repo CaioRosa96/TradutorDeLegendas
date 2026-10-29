@@ -141,8 +141,8 @@ class HeaderView(ctk.CTkFrame):
     def redefinir_textos(self):
         """Atualiza os textos traduziveis apos troca de idioma."""
         self.lbl_sub.configure(text=I18n.t("app_sub"))
-        self.btn_tema.configure(text=f"🎨 {I18n.t('btn_visualizar')}")
-        self.btn_grimorio.configure(text=f"📖 {I18n.t('btn_grimorio')}")
+        self.btn_tema.configure(text=I18n.t("btn_visualizar"))
+        self.btn_grimorio.configure(text=I18n.t("btn_grimorio"))
         self.lbl_status.configure(text=I18n.t("status_pronto"))
 
     def _on_grimorio_click(self):

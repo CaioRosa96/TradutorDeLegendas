@@ -127,3 +127,19 @@ def test_inicializacao_interface_classica():
         assert "Tradutor" in app.title()
     finally:
         app.destroy()
+
+
+def test_header_redefinir_textos_mantem_consistencia_com_inicializacao():
+    """Garante que redefinir_textos() no HeaderView nao injeta prefixos inexistentes na criacao."""
+    from tradutor.interface import InterfaceGrafica
+
+    I18n.definir_idioma("pt-br")
+    app = InterfaceGrafica()
+    try:
+        texto_inicial_tema = app.header.btn_tema.cget("text")
+        texto_inicial_grimorio = app.header.btn_grimorio.cget("text")
+        app.header.redefinir_textos()
+        assert app.header.btn_tema.cget("text") == texto_inicial_tema
+        assert app.header.btn_grimorio.cget("text") == texto_inicial_grimorio
+    finally:
+        app.destroy()

@@ -14,11 +14,12 @@ class ProcessadorArquivoBase(ABC):
     específicos para as subclasses (Estratégias).
     """
 
-    def __init__(self, log_cb, progress_cb, ask_overwrite_cb, is_running_cb):
+    def __init__(self, log_cb, progress_cb, ask_overwrite_cb, is_running_cb, engine=None):
         self.log = log_cb
         self.update_progress = progress_cb
         self.ask_overwrite = ask_overwrite_cb
         self.is_running = is_running_cb
+        self.engine = engine
 
     def process(self, origem, idioma_origem, idioma_destino, manter_legenda) -> bool:
         """Executa o pipeline padrão para um arquivo."""
@@ -53,7 +54,7 @@ class ProcessadorArquivoBase(ABC):
         try:
             # 5. Tradução (Core)
             self.log(self.get_translation_message())
-            engine = MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
+            engine = self.engine or MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
             translator_svc = ServicoTraducao(
                 logger=self.log, 
                 progress_callback=self.update_progress, 
