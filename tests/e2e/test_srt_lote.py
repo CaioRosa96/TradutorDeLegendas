@@ -24,6 +24,8 @@ def rodar_teste():
 
     patcher_anilist = patch('alimentar_glossario.auto_alimentar', return_value=None)
     patcher_anilist.start()
+    patcher_anilist_mod = patch('tradutor.anilist.auto_alimentar', return_value=None)
+    patcher_anilist_mod.start()
     # --------------------------
     
     # Mockando a interface gráfica
@@ -91,12 +93,11 @@ def rodar_teste():
 
         print(f"\n=> Enviando {arquivo} para o Orquestrador (src_esperado: {idioma_pref})\n")
         
-        # Reinicia a flag e inicia o processamento
-        model._is_running = True
+        # Inicia o processamento (start() define _is_running = True atomicamente)
         model.start([origem], idioma_origem=idioma_pref, idioma_destino="pt", manter_legenda=True)
         
         while model._is_running:
-            time.sleep(1)
+            time.sleep(0.2)
             
         # Avaliando
         if os.path.exists(destino):
@@ -130,6 +131,7 @@ def rodar_teste():
             relatorio_geral[arquivo] = {"status": "FALHA"}
 
     relatorio_path = os.path.join(diretorio_teste, "output", "relatorio_teste_massivo.json")
+    os.makedirs(os.path.dirname(relatorio_path), exist_ok=True)
     with open(relatorio_path, 'w', encoding='utf-8') as f:
         json.dump(relatorio_geral, f, indent=4, ensure_ascii=False)
         
