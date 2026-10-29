@@ -46,8 +46,9 @@ def compilar_alvo(alvo_script: str, nome_saida: str, modo_onefile: bool = False)
         "--specpath", os.path.join(DIRETORIO_RAIZ, "packaging"),
     ]
 
-    mkvmerge_path = os.path.join(DIRETORIO_RAIZ, "mkvtoolnix", "mkvmerge.exe")
-    mkvextract_path = os.path.join(DIRETORIO_RAIZ, "mkvtoolnix", "mkvextract.exe")
+    sys.path.insert(0, DIRETORIO_RAIZ)
+    from tradutor.config import GerenciadorConfig
+    mkvmerge_path, mkvextract_path = GerenciadorConfig.get_mkv_bins()
     if os.path.exists(mkvmerge_path) and os.path.exists(mkvextract_path):
         cmd.extend([
             "--add-binary", f"{mkvmerge_path};mkvtoolnix",

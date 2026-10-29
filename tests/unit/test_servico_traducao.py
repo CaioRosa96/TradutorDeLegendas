@@ -332,3 +332,44 @@ async def test_chave_de_cache_usa_texto_mascarado_do_bloco(servico_setup):
 def test_pausa_padrao_do_fallback_respeita_rate_limit():
     assert GerenciadorConfig.PAUSA_FALLBACK_SEGUNDOS == 0.5
 
+
+def test_servico_traducao_repassa_auto_alimentar_para_glossario(mocker):
+    """Garante que o ServicoTraducao repassa a flag habilitar_auto_alimentar ao GerenciadorGlossario."""
+    mocker.patch("tradutor.servico_traducao.CacheTraducoes")
+    mock_gg = mocker.patch("tradutor.servico_traducao.GerenciadorGlossario")
+
+    ServicoTraducao(
+        logger=MagicMock(),
+        progress_callback=MagicMock(),
+        engine=MagicMock(),
+        video_filename="Bleach_01.mkv",
+        habilitar_auto_alimentar=True,
+    )
+
+    mock_gg.assert_called_once_with(
+        video_filename="Bleach_01.mkv",
+        habilitar_auto_alimentar=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_cache_get_many_evita_rede_quando_linhas_ja_cacheadas(servico_setup):
+    """Se o bloco inteiro der cache miss, mas todas as linhas individuais já estiverem no
+    cache via get_many (ex: abertura repetida entre episódios), não deve chamar a rede."""
+    servico, mock_engine, _, _ = servico_setup
+    servico._cache.get.return_value = None
+    servico._cache.get_many.return_value = {
+        "Opening line 1": "Linha de abertura 1",
+        "Opening line 2": "Linha de abertura 2",
+    }
+
+    subs = [
+        EventoLegendaDummy("Opening line 1"),
+        EventoLegendaDummy("Opening line 2"),
+    ]
+
+    await _executar_lote(servico, subs)
+
+    assert mock_engine.translate.call_count == 0
+    assert [s.text for s in subs] == ["Linha de abertura 1", "Linha de abertura 2"]
+

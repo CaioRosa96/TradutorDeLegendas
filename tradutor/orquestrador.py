@@ -2,8 +2,10 @@ import os
 import time
 import threading
 
+from .config import GerenciadorConfig
 from .estrategias import FabricaProcessadores
 from .logger import app_logger
+from .tradutores import MotorTraducaoGoogle
 
 class OrquestradorTraducoes:
     """Model layer: Orquestra o pipeline completo de tradução de arquivos.
@@ -57,6 +59,8 @@ class OrquestradorTraducoes:
         log(f"INICIANDO PROCESSAMENTO EM LOTE: {total_arquivos} arquivo(s)")
         log("="*60)
 
+        engine_compartilhado = MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
+
         try:
             for index, origem in enumerate(files, 1):
                 if not self._is_running:
@@ -68,7 +72,8 @@ class OrquestradorTraducoes:
 
                     # Devolvemos a responsabilidade de saber COMO processar para o Factory/Strategy
                     processador = FabricaProcessadores.get_processor(
-                        origem, log, update_progress, ask_overwrite, lambda: self._is_running
+                        origem, log, update_progress, ask_overwrite, lambda: self._is_running,
+                        engine=engine_compartilhado
                     )
                     resultado = processador.process(origem, idioma_origem, idioma_destino, manter_legenda)
 

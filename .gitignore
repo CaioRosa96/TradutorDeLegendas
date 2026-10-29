@@ -384,3 +384,12 @@ dist/
 packaging/*.spec
 
 
+# Ferramentas e Binarios Externos de Midia (Desacoplados do Git)
+mkvtoolnix/
+tests/data/*.mkv
+tests/data/*.mp4
+tests/output/
+
+# Arquivos locais de projeto Visual Studio
+*.pyproj
+*.slnx

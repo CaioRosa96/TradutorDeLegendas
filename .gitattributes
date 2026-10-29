@@ -65,3 +65,10 @@
 # Github Linguist (Stats Override)
 ###############################################################################
 mkvtoolnix/** linguist-vendored
+
+# Exclusoes de exportacao (git archive)
+mkvtoolnix/ export-ignore
+tests/data/VideoForTest.mkv export-ignore
+tests/output/ export-ignore
+*.pyproj export-ignore
+*.slnx export-ignore

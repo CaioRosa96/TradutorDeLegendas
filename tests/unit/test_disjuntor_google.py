@@ -120,3 +120,71 @@ def test_chamada_de_rede_permanece_fora_do_lock(translator_falso, logger_falso):
     assert erros == []
     assert sorted(resultados) == ["[pt] linha 0", "[pt] linha 1", "[pt] linha 2"]
     assert motor._failure_count == 0
+
+
+def test_isolamento_instancia_translator_por_thread(mocker, logger_falso):
+    """Cada thread do pool deve possuir sua própria instância de Translator (threading.local)
+    para evitar condições de corrida internas na sessão HTTP do googletrans."""
+    instancias_vistas = []
+    lock_lista = threading.Lock()
+    barreira = threading.Barrier(2, timeout=TIMEOUT_SINCRONIA)
+
+    def criar_translator():
+        instancia = SimpleNamespace()
+
+        def fake_translate(texto, src, dest):
+            barreira.wait()
+            return SimpleNamespace(text=f"[{dest}] {texto}")
+
+        instancia.translate = fake_translate
+        return instancia
+
+    mocker.patch("tradutor.tradutores.google.Translator", side_effect=criar_translator)
+    motor = MotorTraducaoGoogle(max_retries=1)
+
+    def worker(i):
+        motor.translate(f"fala {i}", "en", "pt")
+        with lock_lista:
+            instancias_vistas.append(id(motor._engine))
+
+    t1 = threading.Thread(target=worker, args=(1,))
+    t2 = threading.Thread(target=worker, args=(2,))
+    t1.start()
+    t2.start()
+    t1.join(TIMEOUT_SINCRONIA)
+    t2.join(TIMEOUT_SINCRONIA)
+
+    assert len(instancias_vistas) == 2
+    assert instancias_vistas[0] != instancias_vistas[1]
+
+
+def test_orquestrador_compartilha_mesmo_motor_entre_arquivos_da_fila(mocker, tmp_path):
+    """O Circuit Breaker não pode ser resetado ao avançar para o próximo arquivo da fila."""
+    from tradutor.orquestrador import OrquestradorTraducoes
+
+    arq1 = str(tmp_path / "ep1.srt")
+    arq2 = str(tmp_path / "ep2.srt")
+    for p in (arq1, arq2):
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n")
+
+    motores_injetados = []
+
+    class FakeServicoTraducao:
+        def __init__(self, logger, progress_callback, is_cancelled_callback=None, engine=None, video_filename=None, **_kwargs):
+            motores_injetados.append(engine)
+
+        async def pipeline(self, origem, destino, idioma_preferido="auto", idioma_destino="pt"):
+            with open(destino, "w", encoding="utf-8") as f:
+                f.write("1\n00:00:01,000 --> 00:00:02,000\nOlá\n\n")
+
+    mocker.patch("tradutor.estrategias.processador_base.ServicoTraducao", FakeServicoTraducao)
+
+    orq = OrquestradorTraducoes()
+    orq.set_callbacks(lambda _m: None, lambda _c, _t: None, lambda _n: True, lambda: None)
+    orq._is_running = True
+    orq._process_files([arq1, arq2], "en", "pt", True)
+
+    assert len(motores_injetados) == 2
+    assert motores_injetados[0] is not None
+    assert motores_injetados[0] is motores_injetados[1]
