@@ -373,3 +373,29 @@ async def test_cache_get_many_evita_rede_quando_linhas_ja_cacheadas(servico_setu
     assert mock_engine.translate.call_count == 0
     assert [s.text for s in subs] == ["Linha de abertura 1", "Linha de abertura 2"]
 
+
+@pytest.mark.asyncio
+async def test_cache_put_many_e_reuso_parcial_subfrases_entre_episodios(servico_setup):
+    """Garante que put_many salva sub-frases do lote e que um lote parcialmente cacheado
+    via get_many envia à rede apenas as linhas inéditas."""
+    servico, mock_engine, _, _ = servico_setup
+    servico._cache.get.return_value = None
+    servico._cache.get_many.return_value = {
+        "Opening line 1": "Linha de abertura 1",
+    }
+    mock_engine.translate.return_value = "Fala inedita do episodio 2"
+
+    subs = [
+        EventoLegendaDummy("Opening line 1"),
+        EventoLegendaDummy("Episode 2 exclusive line"),
+    ]
+
+    await _executar_lote(servico, subs)
+
+    mock_engine.translate.assert_called_once_with("Episode 2 exclusive line", "auto", "pt")
+    servico._cache.put_many.assert_called_once_with(
+        {"Episode 2 exclusive line": "Fala inedita do episodio 2"}, "auto", "pt"
+    )
+    assert [s.text for s in subs] == ["Linha de abertura 1", "Fala inedita do episodio 2"]
+
+

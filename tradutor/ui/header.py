@@ -38,7 +38,7 @@ class HeaderView(ctk.CTkFrame):
 
         self.badge_versao = ctk.CTkLabel(
             self,
-            text="v2.7.0",
+            text="v2.8.0",
             font=(fonte_ui, 10, "bold"),
             fg_color=CORES["destaque_azul"],
             text_color=CORES.get("btn_destaque_txt", "#ffffff"),

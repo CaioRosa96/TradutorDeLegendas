@@ -16,8 +16,13 @@ class PreferenciasUsuario:
         "tocar_som": True,
         "abrir_pasta_ao_concluir": False,
         "politica_sobrescrita": "perguntar",  # "perguntar", "sobrescrever", "pular"
+        "formato_saida_video": "perguntar",  # "perguntar", "converter_mkv", "manter_original"
         "mkvtoolnix_custom": "",
-        "auto_alimentar_anilist": True
+        "auto_alimentar_anilist": True,
+        "transcricao_habilitada": False,
+        "modelo_whisper": "small",  # "tiny", "small", "medium", "large-v3"
+        "caminho_whisperfile": "",
+        "forcar_transcricao": False,
     }
 
     _dados = None

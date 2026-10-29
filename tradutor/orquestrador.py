@@ -7,6 +7,7 @@ from .estrategias import FabricaProcessadores
 from .logger import app_logger
 from .tradutores import MotorTraducaoGoogle
 
+
 class OrquestradorTraducoes:
     """Model layer: Orquestra o pipeline completo de tradução de arquivos.
 
@@ -17,8 +18,15 @@ class OrquestradorTraducoes:
     def __init__(self):
         self._callbacks = {}
         self._is_running = False
+        self._lock_execucao = threading.Lock()
+        self.arquivo_em_processamento = None
 
-    def set_callbacks(self, log_cb, progress_cb, ask_overwrite_cb, finish_cb):
+    @property
+    def is_running(self) -> bool:
+        """Indica se há um lote em execução no momento."""
+        return self._is_running
+
+    def set_callbacks(self, log_cb, progress_cb, ask_overwrite_cb, finish_cb, ask_whisper_cb=None, ask_output_format_cb=None):
         """Registra os callbacks de comunicação com a camada de apresentação."""
         def custom_log(msg):
             # Salva silenciosamente em arquivo
@@ -30,15 +38,22 @@ class OrquestradorTraducoes:
         self._callbacks['progress'] = progress_cb
         self._callbacks['ask_overwrite'] = ask_overwrite_cb
         self._callbacks['finish'] = finish_cb
+        self._callbacks['ask_whisper'] = ask_whisper_cb
+        self._callbacks['ask_output_format'] = ask_output_format_cb
 
-    def start(self, files, idioma_origem, idioma_destino, manter_legenda):
-        """Inicia o processamento em lote em uma thread separada."""
-        self._is_running = True
+    def start(self, files, idioma_origem, idioma_destino, manter_legenda) -> bool:
+        """Inicia o processamento em lote em uma thread separada, impedindo execuções duplicadas."""
+        with self._lock_execucao:
+            if self._is_running:
+                return False
+            self._is_running = True
+
         threading.Thread(
             target=self._process_files,
             args=(files, idioma_origem, idioma_destino, manter_legenda),
             daemon=True
         ).start()
+        return True
 
     def stop(self):
         """Sinaliza para interromper o processamento."""
@@ -48,32 +63,44 @@ class OrquestradorTraducoes:
         """Loop principal de processamento em lote."""
         log = self._callbacks.get('log', print)
         ask_overwrite = self._callbacks.get('ask_overwrite', lambda x: False)
+        ask_whisper = self._callbacks.get('ask_whisper', None)
+        ask_output_format = self._callbacks.get('ask_output_format', None)
         update_progress = self._callbacks.get('progress', lambda c, t: None)
         on_finish = self._callbacks.get('finish', lambda: None)
 
         tempo_total_inicio = time.time()
-        total_arquivos = len(files)
+        fila_inicial = list(files)
+        total_arquivos = len(fila_inicial)
         arquivos_sucesso = 0
 
-        log("="*60)
+        log("=" * 60)
         log(f"INICIANDO PROCESSAMENTO EM LOTE: {total_arquivos} arquivo(s)")
-        log("="*60)
+        log("=" * 60)
 
         engine_compartilhado = MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
 
         try:
-            for index, origem in enumerate(files, 1):
+            for index, origem in enumerate(fila_inicial, 1):
                 if not self._is_running:
                     break
+                if isinstance(files, list) and origem not in files:
+                    log(f"\n--- Arquivo [{index}/{total_arquivos}]: {os.path.basename(origem)} (removido da fila, pulando) ---")
+                    continue
 
+                self.arquivo_em_processamento = origem
                 try:
                     inicio_arquivo = time.time()
                     log(f"\n--- Arquivo [{index}/{total_arquivos}]: {os.path.basename(origem)} ---")
 
-                    # Devolvemos a responsabilidade de saber COMO processar para o Factory/Strategy
                     processador = FabricaProcessadores.get_processor(
-                        origem, log, update_progress, ask_overwrite, lambda: self._is_running,
-                        engine=engine_compartilhado
+                        origem,
+                        log,
+                        update_progress,
+                        ask_overwrite,
+                        lambda: self._is_running,
+                        engine=engine_compartilhado,
+                        ask_whisper_cb=ask_whisper,
+                        ask_output_format_cb=ask_output_format,
                     )
                     resultado = processador.process(origem, idioma_origem, idioma_destino, manter_legenda)
 
@@ -87,11 +114,13 @@ class OrquestradorTraducoes:
                     continue
 
             tempo_total_gasto = int(time.time() - tempo_total_inicio)
-            log("\n" + "="*60)
+            log("\n" + "=" * 60)
             log("PROCESSAMENTO EM LOTE FINALIZADO")
             log(f"Sucesso: {arquivos_sucesso} de {total_arquivos} arquivos.")
             log(f"Tempo Total Gasto: {tempo_total_gasto}s")
-            log("="*60)
+            log("=" * 60)
         finally:
-            self._is_running = False
+            self.arquivo_em_processamento = None
+            with self._lock_execucao:
+                self._is_running = False
             on_finish()

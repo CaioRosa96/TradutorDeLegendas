@@ -8,6 +8,7 @@ from .footer import FooterView
 from .modal_grimorio import ModalGrimorio
 from .modal_config import ModalConfiguracoes
 from .modal_tema import ModalTemas
+from .modal_whisper import ModalConfirmacaoWhisper, PainelSeletorWhisper
 
 __all__ = [
     "CORES",
@@ -22,5 +23,7 @@ __all__ = [
     "FooterView",
     "ModalGrimorio",
     "ModalConfiguracoes",
-    "ModalTemas"
+    "ModalTemas",
+    "ModalConfirmacaoWhisper",
+    "PainelSeletorWhisper",
 ]
