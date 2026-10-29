@@ -60,7 +60,7 @@ class SidebarView(ctk.CTkFrame):
         rotulo_auto = Idiomas.rotular_origem("auto", idioma_ui)
         self.combo_lang = ctk.CTkOptionMenu(
             self.frame_idiomas,
-            values=[rotulo_auto],
+            values=[Idiomas.rotular_origem(c, idioma_ui) for c in Idiomas.opcoes_origem_padrao()],
             fg_color=CORES["combo_bg"],
             button_color=CORES["combo_btn"],
             button_hover_color=CORES["bg_card_hover"],

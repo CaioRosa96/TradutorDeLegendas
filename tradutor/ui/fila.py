@@ -3,13 +3,14 @@
 import os
 import customtkinter as ctk
 from .tema import CORES
+from ..idiomas import Idiomas
 from ..i18n import I18n
 
 
 class CardArquivo(ctk.CTkFrame):
     """Card individual de representacao de um arquivo na fila de traducao."""
 
-    def __init__(self, master, caminho_arquivo: str, destino_lang: str, on_delete_cb):
+    def __init__(self, master, caminho_arquivo: str, destino_lang: str, on_delete_cb, on_inspect_ia_cb=None):
         largura_borda = CORES.get("borda_largura", 1)
         raio_card = CORES.get("raio_card", 6)
         super().__init__(
@@ -22,7 +23,12 @@ class CardArquivo(ctk.CTkFrame):
         )
         self.pack_propagate(False)
         self.caminho_arquivo = caminho_arquivo
+        self._destino_lang = destino_lang
         self.on_delete_cb = on_delete_cb
+        self.on_inspect_ia_cb = on_inspect_ia_cb
+        self._requer_ia = False
+        self._modelo_ia = "small"
+        self._confirmado_ia = False
 
         self._construir_widgets(caminho_arquivo, destino_lang)
 
@@ -32,8 +38,9 @@ class CardArquivo(ctk.CTkFrame):
         nome_base = os.path.basename(caminho_arquivo)
         ext = nome_base.rsplit('.', 1)[-1].upper() if '.' in nome_base else "RAW"
 
-        cor_bg_badge = CORES["badge_ext_mkv_bg"] if ext == "MKV" else CORES["badge_ext_outros_bg"]
-        cor_txt_badge = CORES["badge_ext_mkv_txt"] if ext == "MKV" else CORES["badge_ext_outros_txt"]
+        eh_video = ext in ("MKV", "MP4", "WEBM", "AVI", "WMV")
+        cor_bg_badge = CORES["badge_ext_mkv_bg"] if eh_video else CORES["badge_ext_outros_bg"]
+        cor_txt_badge = CORES["badge_ext_mkv_txt"] if eh_video else CORES["badge_ext_outros_txt"]
 
         self.badge_ext = ctk.CTkLabel(
             self,
@@ -42,12 +49,12 @@ class CardArquivo(ctk.CTkFrame):
             fg_color=cor_bg_badge,
             text_color=cor_txt_badge,
             corner_radius=raio_card,
-            width=38,
+            width=44,
             height=22
         )
         self.badge_ext.pack(side="left", padx=(10, 8), pady=12)
 
-        texto_nome = nome_base if len(nome_base) <= 45 else nome_base[:42] + "..."
+        texto_nome = nome_base if len(nome_base) <= 36 else nome_base[:33] + "..."
         self.lbl_nome = ctk.CTkLabel(
             self,
             text=texto_nome,
@@ -69,9 +76,10 @@ class CardArquivo(ctk.CTkFrame):
         )
         self.btn_del.pack(side="right", padx=(8, 10), pady=12)
 
+        abrev_dest = Idiomas.abreviar_destino(destino_lang, I18n.obter_idioma())
         self.badge_fluxo = ctk.CTkLabel(
             self,
-            text=f"→ {destino_lang.upper()}",
+            text=f"→ {abrev_dest}",
             font=(fonte_ui, 10, "bold"),
             fg_color=CORES["badge_fluxo_bg"],
             text_color=CORES["badge_fluxo_txt"],
@@ -81,9 +89,53 @@ class CardArquivo(ctk.CTkFrame):
         )
         self.badge_fluxo.pack(side="right", padx=6, pady=12)
 
+        self.btn_ia = ctk.CTkButton(
+            self,
+            text="",
+            command=self._ao_clicar_ia,
+            height=24,
+            width=120,
+            corner_radius=raio_card,
+            font=(fonte_ui, 10, "bold"),
+            fg_color=CORES["bg_sidebar"],
+            hover_color=CORES["bg_card_hover"],
+            border_color=CORES["destaque_azul"],
+            border_width=1,
+            text_color=CORES["destaque_azul"],
+        )
+
+    def _ao_clicar_ia(self):
+        if self.on_inspect_ia_cb:
+            self.on_inspect_ia_cb(self.caminho_arquivo)
+
+    def definir_status_ia(self, requer_ia: bool, modelo_id: str = "small", confirmado: bool = False):
+        """Exibe ou oculta o botao de analise/escolha de IA apenas para arquivos que usarao transcricao."""
+        self._requer_ia = requer_ia
+        self._modelo_ia = modelo_id or "small"
+        self._confirmado_ia = confirmado
+
+        if not requer_ia:
+            self.btn_ia.pack_forget()
+            return
+
+        chave = "btn_card_ia_pronta" if confirmado else "btn_card_analisar_ia"
+        cor_destaque = CORES["destaque_verde"] if confirmado else CORES["destaque_azul"]
+        self.btn_ia.configure(
+            text=I18n.t(chave).format(self._modelo_ia.upper()),
+            border_color=cor_destaque,
+            text_color=cor_destaque,
+            fg_color=CORES["bg_sidebar"],
+            hover_color=CORES["bg_card_hover"],
+        )
+        self.btn_ia.pack(side="right", padx=6, pady=12)
+
     def atualizar_destino(self, novo_destino: str):
-        """Atualiza o texto da pill de fluxo de idioma do card."""
-        self.badge_fluxo.configure(text=f"→ {novo_destino.upper()}")
+        """Atualiza o texto da pill de fluxo de idioma do card e botao de IA se ativo."""
+        self._destino_lang = novo_destino
+        abrev_dest = Idiomas.abreviar_destino(novo_destino, I18n.obter_idioma())
+        self.badge_fluxo.configure(text=f"→ {abrev_dest}")
+        if self._requer_ia:
+            self.definir_status_ia(True, self._modelo_ia, self._confirmado_ia)
 
     def aplicar_tema(self, cores: dict):
         """Atualiza visual do card de acordo com o tema ativo sem elementos residuais."""
@@ -105,7 +157,7 @@ class CardArquivo(ctk.CTkFrame):
         )
 
         ext = self.badge_ext.cget("text")
-        if ext == "MKV":
+        if ext in ("MKV", "MP4", "WEBM", "AVI", "WMV"):
             self.badge_ext.configure(
                 fg_color=cores["badge_ext_mkv_bg"],
                 text_color=cores["badge_ext_mkv_txt"],
@@ -126,19 +178,25 @@ class CardArquivo(ctk.CTkFrame):
             font=(fonte_ui, 10, "bold"),
             corner_radius=raio_card
         )
+        if self._requer_ia:
+            self.definir_status_ia(True, self._modelo_ia, self._confirmado_ia)
 
 
 class PainelFilaView(ctk.CTkFrame):
     """Painel principal da fila com dropzone e lista de cards rolavel."""
 
-    def __init__(self, master, on_add_cb, on_clear_cb, on_remove_item_cb):
+    def __init__(self, master, on_add_cb, on_clear_cb, on_remove_item_cb, on_inspect_ia_cb=None):
         super().__init__(master, fg_color="transparent")
         self.on_add_cb = on_add_cb
         self.on_clear_cb = on_clear_cb
         self.on_remove_item_cb = on_remove_item_cb
+        self.on_inspect_ia_cb = on_inspect_ia_cb
 
         self._cards_instanciados = []
         self._total_atual = 0
+        self._arquivos_sem_legenda = set()
+        self._modelos_por_arquivo = {}
+        self._modelo_padrao = "small"
         self._construir_widgets()
 
     def _construir_widgets(self):
@@ -240,9 +298,32 @@ class PainelFilaView(ctk.CTkFrame):
         self.scroll_cards.pack(fill="both", expand=True)
 
         for arq in arquivos:
-            card = CardArquivo(self.scroll_cards, arq, destino_lang, self.on_remove_item_cb)
+            card = CardArquivo(
+                self.scroll_cards,
+                arq,
+                destino_lang,
+                self.on_remove_item_cb,
+                on_inspect_ia_cb=self.on_inspect_ia_cb,
+            )
             card.pack(fill="x", pady=4, padx=2)
             self._cards_instanciados.append(card)
+
+        self._aplicar_status_ia_nos_cards()
+
+    def atualizar_status_ia(self, arquivos_sem_legenda: set, modelos_por_arquivo: dict, modelo_padrao: str = "small"):
+        """Atualiza nos cards quais arquivos requerem IA e o modelo selecionado para cada um."""
+        self._arquivos_sem_legenda = set(arquivos_sem_legenda)
+        self._modelos_por_arquivo = dict(modelos_por_arquivo)
+        self._modelo_padrao = modelo_padrao or "small"
+        self._aplicar_status_ia_nos_cards()
+
+    def _aplicar_status_ia_nos_cards(self):
+        for card in self._cards_instanciados:
+            arq = card.caminho_arquivo
+            requer = arq in self._arquivos_sem_legenda
+            confirmado = arq in self._modelos_por_arquivo
+            modelo = self._modelos_por_arquivo.get(arq, self._modelo_padrao)
+            card.definir_status_ia(requer, modelo_id=modelo, confirmado=confirmado)
 
     def _atualizar_titulo_fila(self):
         termo_arq = I18n.t("arquivo_singular") if self._total_atual == 1 else I18n.t("arquivo_plural")
@@ -258,6 +339,8 @@ class PainelFilaView(ctk.CTkFrame):
         self.btn_add.configure(text=I18n.t("btn_add"))
         self.lbl_drop_texto.configure(text=I18n.t("drop_texto"))
         self.lbl_drop_sub.configure(text=I18n.t("drop_sub"))
+        for card in self._cards_instanciados:
+            card.atualizar_destino(card._destino_lang)
 
     def aplicar_tema(self, cores: dict):
         """Propaga as novas cores, fontes e cantos do tema para dropzone, botoes e cards da fila."""
@@ -303,3 +386,5 @@ class PainelFilaView(ctk.CTkFrame):
         estado = "normal" if habilitado else "disabled"
         self.btn_add.configure(state=estado)
         self.btn_limpar.configure(state=estado)
+        for card in self._cards_instanciados:
+            card.btn_ia.configure(state=estado)

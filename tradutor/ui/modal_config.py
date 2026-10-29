@@ -1,4 +1,4 @@
-"""Janela modal de Configuracoes Gerais, Armazenamento e Informacoes do Sistema."""
+"""Janela modal de Configuracoes Gerais, IA Local, Armazenamento e Informacoes do Sistema."""
 
 import webbrowser
 from tkinter import messagebox
@@ -7,17 +7,18 @@ import customtkinter as ctk
 from ..config_usuario import PreferenciasUsuario
 from ..cache import CacheTraducoes
 from ..i18n import I18n
+from .modal_whisper import PainelSeletorWhisper
 from .tema import CORES
 
 
 class ModalConfiguracoes(ctk.CTkToplevel):
-    """Modal em abas para configuracoes de idioma, sistema, cache e sobre o projeto."""
+    """Modal em abas para configuracoes de idioma, IA local Whisper, sistema, cache e sobre o projeto."""
 
     def __init__(self, master, ao_alterar_idioma_cb=None):
         super().__init__(master)
         self.title(I18n.t("modal_config_titulo"))
-        self.geometry("640x510")
-        self.minsize(580, 460)
+        self.geometry("650x570")
+        self.minsize(590, 520)
         self.configure(fg_color=CORES["bg_janela"])
         self.transient(master)
         self.after(50, self.focus)
@@ -57,6 +58,23 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         self._montar_aba_sistema(self.aba_sistema)
         self._montar_aba_sobre(self.aba_sobre)
 
+    def _criar_switch(self, master, chave_i18n: str, chave_pref: str, padrao: bool):
+        fonte_ui = CORES.get("fonte_ui", "Segoe UI")
+        sw = ctk.CTkSwitch(
+            master,
+            text=I18n.t(chave_i18n),
+            font=(fonte_ui, 11),
+            text_color=CORES["texto_principal"],
+            progress_color=CORES["destaque_verde"],
+            fg_color=CORES.get("progressbar_bg", CORES["bg_card"]),
+            button_color=CORES["texto_principal"],
+            button_hover_color=CORES["destaque_azul"],
+            command=self._salvar_switches
+        )
+        if PreferenciasUsuario.obter(chave_pref, padrao):
+            sw.select()
+        return sw
+
     def _montar_aba_geral(self, aba):
         largura_borda = CORES.get("borda_largura", 1)
         raio_card = CORES.get("raio_card", 6)
@@ -68,7 +86,7 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             font=(fonte_ui, 12, "bold"),
             text_color=CORES["texto_secundario"]
         )
-        self.lbl_sec_pref.pack(anchor="w", padx=16, pady=(12, 6))
+        self.lbl_sec_pref.pack(anchor="w", padx=16, pady=(8, 4))
 
         frame_idioma = ctk.CTkFrame(
             aba,
@@ -77,7 +95,7 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             border_width=largura_borda,
             corner_radius=raio_card
         )
-        frame_idioma.pack(fill="x", padx=14, pady=6)
+        frame_idioma.pack(fill="x", padx=14, pady=4)
 
         self.lbl_idioma_tit = ctk.CTkLabel(
             frame_idioma,
@@ -85,7 +103,7 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             font=(fonte_ui, 11),
             text_color=CORES["texto_principal"]
         )
-        self.lbl_idioma_tit.pack(side="left", padx=12, pady=10)
+        self.lbl_idioma_tit.pack(side="left", padx=12, pady=8)
 
         opcoes_idioma = list(I18n.IDIOMAS_SUPORTADOS.values())
         idioma_atual = I18n.IDIOMAS_SUPORTADOS.get(I18n.obter_idioma(), "Português (Brasil)")
@@ -107,38 +125,30 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             height=28
         )
         self.cmb_idioma.set(idioma_atual)
-        self.cmb_idioma.pack(side="right", padx=12, pady=10)
+        self.cmb_idioma.pack(side="right", padx=12, pady=8)
 
-        # Switches
-        self.sw_som = ctk.CTkSwitch(
-            aba,
-            text=I18n.t("sw_som_notif"),
-            font=(fonte_ui, 11),
-            text_color=CORES["texto_principal"],
-            progress_color=CORES["destaque_verde"],
-            fg_color=CORES.get("progressbar_bg", CORES["bg_card"]),
-            button_color=CORES["texto_principal"],
-            button_hover_color=CORES["destaque_azul"],
-            command=self._salvar_switches
-        )
-        if PreferenciasUsuario.obter("tocar_som", True):
-            self.sw_som.select()
-        self.sw_som.pack(anchor="w", padx=16, pady=(12, 6))
+        self.sw_som = self._criar_switch(aba, "sw_som_notif", "tocar_som", True)
+        self.sw_som.pack(anchor="w", padx=16, pady=(8, 4))
 
-        self.sw_pasta = ctk.CTkSwitch(
+        self.sw_pasta = self._criar_switch(aba, "sw_abrir_pasta", "abrir_pasta_ao_concluir", False)
+        self.sw_pasta.pack(anchor="w", padx=16, pady=4)
+
+        self.sw_anilist = self._criar_switch(aba, "sw_auto_anilist", "auto_alimentar_anilist", True)
+        self.sw_anilist.pack(anchor="w", padx=16, pady=4)
+
+        self.lbl_sec_ia = ctk.CTkLabel(
             aba,
-            text=I18n.t("sw_abrir_pasta"),
-            font=(fonte_ui, 11),
-            text_color=CORES["texto_principal"],
-            progress_color=CORES["destaque_verde"],
-            fg_color=CORES.get("progressbar_bg", CORES["bg_card"]),
-            button_color=CORES["texto_principal"],
-            button_hover_color=CORES["destaque_azul"],
-            command=self._salvar_switches
+            text=I18n.t("sec_ia_whisper"),
+            font=(fonte_ui, 12, "bold"),
+            text_color=CORES["texto_secundario"]
         )
-        if PreferenciasUsuario.obter("abrir_pasta_ao_concluir", False):
-            self.sw_pasta.select()
-        self.sw_pasta.pack(anchor="w", padx=16, pady=6)
+        self.lbl_sec_ia.pack(anchor="w", padx=16, pady=(12, 4))
+
+        self.painel_whisper = PainelSeletorWhisper(aba)
+        self.painel_whisper.pack(fill="x", padx=14, pady=4)
+
+        self.sw_forcar_whisper = self._criar_switch(aba, "sw_forcar_transcricao", "forcar_transcricao", False)
+        self.sw_forcar_whisper.pack(anchor="w", padx=16, pady=(6, 4))
 
     def _montar_aba_sistema(self, aba):
         largura_borda = CORES.get("borda_largura", 1)
@@ -153,7 +163,6 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         )
         self.lbl_sec_sis.pack(anchor="w", padx=16, pady=(12, 6))
 
-        # Sobrescrita
         frame_sob = ctk.CTkFrame(
             aba,
             fg_color=CORES["bg_card"],
@@ -196,7 +205,48 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         self.cmb_politica.set(self.politicas_map.get(chave_atual, I18n.t("opt_perguntar")))
         self.cmb_politica.pack(side="right", padx=12, pady=10)
 
-        # Cache SQLite
+        frame_fmt = ctk.CTkFrame(
+            aba,
+            fg_color=CORES["bg_card"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            corner_radius=raio_card
+        )
+        frame_fmt.pack(fill="x", padx=14, pady=6)
+
+        self.lbl_formato_tit = ctk.CTkLabel(
+            frame_fmt,
+            text=I18n.t("lbl_formato_saida_video"),
+            font=(fonte_ui, 11),
+            text_color=CORES["texto_principal"]
+        )
+        self.lbl_formato_tit.pack(side="left", padx=12, pady=10)
+
+        self.formatos_map = {
+            "perguntar": I18n.t("opt_formato_perguntar"),
+            "converter_mkv": I18n.t("opt_formato_mkv"),
+            "manter_original": I18n.t("opt_formato_original"),
+        }
+        self.cmb_formato_saida = ctk.CTkOptionMenu(
+            frame_fmt,
+            values=list(self.formatos_map.values()),
+            command=self._ao_alterar_formato_saida,
+            fg_color=CORES["combo_bg"],
+            button_color=CORES["combo_btn"],
+            button_hover_color=CORES["bg_card_hover"],
+            dropdown_fg_color=CORES["combo_bg"],
+            dropdown_text_color=CORES["texto_principal"],
+            dropdown_hover_color=CORES["bg_card_hover"],
+            text_color=CORES["texto_principal"],
+            font=(fonte_ui, 11),
+            dropdown_font=(fonte_ui, 11),
+            corner_radius=raio_card,
+            height=28
+        )
+        fmt_atual = PreferenciasUsuario.obter("formato_saida_video", "perguntar")
+        self.cmb_formato_saida.set(self.formatos_map.get(fmt_atual, I18n.t("opt_formato_perguntar")))
+        self.cmb_formato_saida.pack(side="right", padx=12, pady=10)
+
         frame_cache = ctk.CTkFrame(
             aba,
             fg_color=CORES["bg_card"],
@@ -287,11 +337,19 @@ class ModalConfiguracoes(ctk.CTkToplevel):
     def _salvar_switches(self):
         PreferenciasUsuario.definir("tocar_som", bool(self.sw_som.get()))
         PreferenciasUsuario.definir("abrir_pasta_ao_concluir", bool(self.sw_pasta.get()))
+        PreferenciasUsuario.definir("auto_alimentar_anilist", bool(self.sw_anilist.get()))
+        PreferenciasUsuario.definir("forcar_transcricao", bool(self.sw_forcar_whisper.get()))
 
     def _ao_alterar_politica(self, valor_visivel: str):
         for k, v in self.politicas_map.items():
             if v == valor_visivel:
                 PreferenciasUsuario.definir("politica_sobrescrita", k)
+                break
+
+    def _ao_alterar_formato_saida(self, valor_visivel: str):
+        for k, v in self.formatos_map.items():
+            if v == valor_visivel:
+                PreferenciasUsuario.definir("formato_saida_video", k)
                 break
 
     def _ao_selecionar_idioma(self, valor_visivel: str):
@@ -307,6 +365,11 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         self.lbl_idioma_tit.configure(text=I18n.t("lbl_idioma_app"))
         self.sw_som.configure(text=I18n.t("sw_som_notif"))
         self.sw_pasta.configure(text=I18n.t("sw_abrir_pasta"))
+        self.sw_anilist.configure(text=I18n.t("sw_auto_anilist"))
+        self.lbl_sec_ia.configure(text=I18n.t("sec_ia_whisper"))
+        self.painel_whisper.lbl_titulo.configure(text=I18n.t("lbl_modelo_whisper"))
+        self.painel_whisper.atualizar_opcoes()
+        self.sw_forcar_whisper.configure(text=I18n.t("sw_forcar_transcricao"))
 
         self.lbl_sec_sis.configure(text=I18n.t("sec_sistema"))
         self.lbl_conflito_tit.configure(text=I18n.t("lbl_conflito"))
@@ -318,6 +381,16 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         self.cmb_politica.configure(values=list(self.politicas_map.values()))
         chave_atual = PreferenciasUsuario.obter("politica_sobrescrita", "perguntar")
         self.cmb_politica.set(self.politicas_map.get(chave_atual, I18n.t("opt_perguntar")))
+
+        self.lbl_formato_tit.configure(text=I18n.t("lbl_formato_saida_video"))
+        self.formatos_map = {
+            "perguntar": I18n.t("opt_formato_perguntar"),
+            "converter_mkv": I18n.t("opt_formato_mkv"),
+            "manter_original": I18n.t("opt_formato_original"),
+        }
+        self.cmb_formato_saida.configure(values=list(self.formatos_map.values()))
+        fmt_atual = PreferenciasUsuario.obter("formato_saida_video", "perguntar")
+        self.cmb_formato_saida.set(self.formatos_map.get(fmt_atual, I18n.t("opt_formato_perguntar")))
 
         self.lbl_cache_info.configure(text=self._obter_texto_cache())
         self.btn_limpar_cache.configure(text=I18n.t("btn_limpar_cache"))
