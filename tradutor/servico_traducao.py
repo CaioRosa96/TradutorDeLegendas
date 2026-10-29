@@ -87,9 +87,10 @@ class ServicoTraducao:
             try:
                 # 1. Busca no Cache Local (Nível 1: Bloco Inteiro)
                 traduzido = self._cache.get(bloco_protegido, src_lang, dest_lang)
-                
+                payloads_linhas = None
+
                 if not traduzido:
-                    # Nível 2: Verifica se todas as linhas já estão cacheadas individualmente via get_many
+                    # Nível 2: Verifica linhas cacheadas individualmente via get_many
                     payloads_linhas = [
                         self._glossary.proteger(t, id_linha=idx)
                         for idx, t in zip(lote_indices, textos_preparados)
@@ -101,7 +102,7 @@ class ServicoTraducao:
                     if not isinstance(cache_parcial, dict):
                         cache_parcial = {}
 
-                    if cache_parcial and len(cache_parcial) == len(chaves_linhas):
+                    if cache_parcial and all(c in cache_parcial for c in chaves_linhas):
                         for idx, p_linha in zip(lote_indices, payloads_linhas):
                             r_cached = cache_parcial[p_linha.texto_mascarado]
                             r_rest = self._glossary.restaurar(r_cached, p_linha)
@@ -110,6 +111,37 @@ class ServicoTraducao:
                             self._linhas_processadas += len(lote_indices)
                             self._progress_callback(self._linhas_processadas, self._total_linhas)
                         return
+
+                    if cache_parcial:
+                        pendentes = []
+                        for idx, p_linha in zip(lote_indices, payloads_linhas):
+                            if p_linha.texto_mascarado in cache_parcial:
+                                r_cached = cache_parcial[p_linha.texto_mascarado]
+                                r_rest = self._glossary.restaurar(r_cached, p_linha)
+                                subs[idx].text = self._limpar_quebras(r_rest.strip())
+                            else:
+                                pendentes.append((idx, p_linha))
+
+                        if pendentes:
+                            sub_bloco = "\n".join(p.texto_mascarado for _, p in pendentes)
+                            sub_trad = await loop.run_in_executor(
+                                executor, self._engine.translate, sub_bloco, src_lang, dest_lang
+                            )
+                            sub_linhas = sub_trad.split("\n")
+                            if len(sub_linhas) == len(pendentes) + 1 and not sub_linhas[-1].strip():
+                                sub_linhas = sub_linhas[:-1]
+                            if len(sub_linhas) == len(pendentes):
+                                novos_lote = {}
+                                for (idx, p_linha), linha_bruta in zip(pendentes, sub_linhas):
+                                    novos_lote[p_linha.texto_mascarado] = linha_bruta.strip()
+                                    r_rest = self._glossary.restaurar(linha_bruta, p_linha)
+                                    subs[idx].text = self._limpar_quebras(r_rest.strip())
+                                if novos_lote and hasattr(self._cache, "put_many"):
+                                    self._cache.put_many(novos_lote, src_lang, dest_lang)
+                                with pbar_lock:
+                                    self._linhas_processadas += len(lote_indices)
+                                    self._progress_callback(self._linhas_processadas, self._total_linhas)
+                                return
 
                     # 2. Se não existir, vai na Rede via Engine injetada
                     traduzido = await loop.run_in_executor(executor, self._engine.translate, bloco_protegido, src_lang, dest_lang)
@@ -127,6 +159,14 @@ class ServicoTraducao:
                 if len(frases_limpas) == len(lote_indices):
                     for i, idx in enumerate(lote_indices):
                         subs[idx].text = frases_limpas[i]
+                    if payloads_linhas and hasattr(self._cache, "put_many"):
+                        novos_individuais = {
+                            p_linha.texto_mascarado: frase_limpa
+                            for p_linha, frase_limpa in zip(payloads_linhas, frases_limpas)
+                            if not p_linha.possui_tokens and p_linha.texto_mascarado
+                        }
+                        if novos_individuais:
+                            self._cache.put_many(novos_individuais, src_lang, dest_lang)
                 else:
                     self._logger("[Aviso] Dessincronia no lote. Executando fallback sequencial...")
                     for pos, (idx, texto) in enumerate(zip(lote_indices, textos_preparados)):
