@@ -12,6 +12,28 @@ from tradutor.ui.tema import definir_tema, obter_tema_ativo, TEMAS
 from tradutor.config import GerenciadorConfig
 
 
+@pytest.fixture(scope="module")
+def app_interface():
+    """Instância compartilhada de InterfaceGrafica para os testes do módulo."""
+    import tradutor.interface as mod_interface
+    from tradutor.interface import InterfaceGrafica
+
+    original_dnd = mod_interface.HAS_DND
+    mod_interface.HAS_DND = False
+    I18n.definir_idioma("pt-br")
+    definir_tema("escuro")
+    app = InterfaceGrafica()
+    try:
+        yield app
+    finally:
+        try:
+            app.update_idletasks()
+            app.destroy()
+        except Exception:
+            pass
+        mod_interface.HAS_DND = original_dnd
+
+
 def test_preferencias_usuario_padrao_e_modificacao(tmp_path):
     """Garante que as preferencias carregam padroes e persistem novos valores."""
     arquivo_temp = str(tmp_path / "pref_teste.json")
@@ -77,48 +99,121 @@ def test_leitura_glossarios_grimorio():
     assert len(linhas) > 0, "O arquivo de glossario nao deve estar vazio."
 
 
-def test_propagacao_tema_e_idioma_interface():
+def test_propagacao_tema_e_idioma_interface(app_interface):
     """Garante que a propagacao de tema e a mudanca de idioma ocorrem sem falhas."""
-    from tradutor.interface import InterfaceGrafica
+    app = app_interface
+    app.files = []
+    app._sincronizar_fila()
 
-    app = InterfaceGrafica()
+    # 1. Testa temas
+    for tema in ["claro", "alto_contraste", "ms_dos", "escuro"]:
+        definir_tema(tema)
+        app._aplicar_novo_tema(tema)
+
+    # 2. Testa mudanca de idioma para ingles
+    I18n.definir_idioma("en")
+    app._aplicar_novo_idioma("en")
+    assert "Tradutor Subtitle Translator" in app.title()
+    assert "Subtitles" in app.header.lbl_sub.cget("text")
+    assert "TRANSLATION PARAMETERS" in app.sidebar.lbl_secao.cget("text")
+    assert "Portuguese (pt)" in app.sidebar.combo_lang_dest.get()
+    assert "Auto (auto)" in app.sidebar.combo_lang.get()
+    assert "Processing Queue (0 files)" in app.fila.lbl_titulo.cget("text")
+    assert "START TRANSLATION" in app.footer.btn_run.cget("text")
+
+    # 3. Testa mudanca de idioma de volta para portugues
+    I18n.definir_idioma("pt-br")
+    app._aplicar_novo_idioma("pt-br")
+    assert "Tradutor de Legendas" in app.title()
+    assert "Legendas" in app.header.lbl_sub.cget("text")
+    assert "PARÂMETROS DE TRADUÇÃO" in app.sidebar.lbl_secao.cget("text")
+    assert "Português (pt)" in app.sidebar.combo_lang_dest.get()
+    assert "Automático (auto)" in app.sidebar.combo_lang.get()
+    assert "Fila de Processamento (0 arquivos)" in app.fila.lbl_titulo.cget("text")
+    assert "INICIAR TRADUÇÃO" in app.footer.btn_run.cget("text")
+
+
+def test_header_redefinir_textos_mantem_consistencia_com_inicializacao(app_interface):
+    """Garante que redefinir_textos() no HeaderView nao injeta prefixos inexistentes na criacao."""
+    app = app_interface
+    I18n.definir_idioma("pt-br")
+    app._aplicar_novo_idioma("pt-br")
+    texto_inicial_tema = app.header.btn_tema.cget("text")
+    texto_inicial_grimorio = app.header.btn_grimorio.cget("text")
+    app.header.redefinir_textos()
+    assert app.header.btn_tema.cget("text") == texto_inicial_tema
+    assert app.header.btn_grimorio.cget("text") == texto_inicial_grimorio
+
+
+def test_remover_item_durante_execucao_nao_reativa_botao_iniciar_nem_duplica_processo(app_interface, mocker):
+    """Regressão: remover item da fila com tradução em andamento não pode voltar o botão
+    para 'INICIAR TRADUÇÃO' nem permitir que duas threads do Orquestrador rodem em paralelo."""
+    import threading
+    from tradutor.orquestrador import OrquestradorTraducoes
+    from tradutor.controlador import ControladorApp
+
+    app = app_interface
+    I18n.definir_idioma("pt-br")
+    orq = OrquestradorTraducoes()
+    ctrl = ControladorApp(app, orq)
+    mocker.patch.object(ctrl, "on_files_selected")
+
+    app.files = ["video_sem_legenda.mkv", "video_com_legenda.mkv"]
+    app._sincronizar_fila()
+
+    # Simula início do processamento do primeiro vídeo (lote em andamento)
+    evento_bloqueio = threading.Event()
+    evento_concluido = threading.Event()
+    contagem_execucoes = []
+
+    def fake_process_files(files, *_args):
+        contagem_execucoes.append(list(files))
+        evento_bloqueio.wait(timeout=2.0)
+        orq._is_running = False
+        evento_concluido.set()
+
+    mocker.patch.object(orq, "_process_files", side_effect=fake_process_files)
+
     try:
-        # 1. Testa temas
-        for tema in ["claro", "alto_contraste", "ms_dos", "escuro"]:
-            definir_tema(tema)
-            app._aplicar_novo_tema(tema)
+        ctrl.start_translation(app.files, "auto", "pt", False)
+        assert bool(app.footer.btn_cancelar.winfo_manager()) is True
+        assert bool(app.footer.btn_run.winfo_manager()) is False
 
-        # 2. Testa mudanca de idioma para ingles
-        I18n.definir_idioma("en")
-        app._aplicar_novo_idioma("en")
-        assert "Tradutor Subtitle Translator" in app.title()
-        assert "Subtitles" in app.header.lbl_sub.cget("text")
-        assert "TRANSLATION PARAMETERS" in app.sidebar.lbl_secao.cget("text")
-        assert "Portuguese (pt)" in app.sidebar.combo_lang_dest.get()
-        assert "Auto (auto)" in app.sidebar.combo_lang.get()
-        assert "Processing Queue (0 files)" in app.fila.lbl_titulo.cget("text")
-        assert "START TRANSLATION" in app.footer.btn_run.cget("text")
+        # Usuário tenta remover o segundo vídeo enquanto o primeiro ainda está processando
+        app._remover_arquivo("video_com_legenda.mkv")
 
-        # 3. Testa mudanca de idioma de volta para portugues
-        I18n.definir_idioma("pt-br")
-        app._aplicar_novo_idioma("pt-br")
-        assert "Tradutor de Legendas" in app.title()
-        assert "Legendas" in app.header.lbl_sub.cget("text")
-        assert "PARÂMETROS DE TRADUÇÃO" in app.sidebar.lbl_secao.cget("text")
-        assert "Português (pt)" in app.sidebar.combo_lang_dest.get()
-        assert "Automático (auto)" in app.sidebar.combo_lang.get()
-        assert "Fila de Processamento (0 arquivos)" in app.fila.lbl_titulo.cget("text")
-        assert "INICIAR TRADUÇÃO" in app.footer.btn_run.cget("text")
+        # 1. O botão NÃO pode voltar para INICIAR TRADUÇÃO enquanto o lote estiver rodando
+        assert bool(app.footer.btn_run.winfo_manager()) is False, (
+            "O botão 'INICIAR TRADUÇÃO' reapareceu indevidamente durante a execução!"
+        )
+        assert bool(app.footer.btn_cancelar.winfo_manager()) is True
+
+        # 2. Tentativa de chamar start() novamente enquanto já está rodando deve ser ignorada
+        orq.start(app.files, "auto", "pt", False)
+        evento_bloqueio.set()
+        evento_concluido.wait(timeout=2.0)
+
+        assert len(contagem_execucoes) == 1, "O Orquestrador permitiu duas execuções simultâneas em paralelo!"
     finally:
-        app.destroy()
+        evento_bloqueio.set()
+        app._em_execucao = False
+        app.footer.configurar_modo_pronto(False)
+        app.files = []
+        app._sincronizar_fila()
 
 
-def test_inicializacao_interface_classica():
+def test_inicializacao_interface_classica(app_interface, mocker):
     """Garante que a interface clássica pode ser instanciada e configurada com o Controller."""
+    import tradutor.interface_classica as mod_classica
     from tradutor.interface_classica import InterfaceGrafica as InterfaceClassica
     from tradutor.orquestrador import OrquestradorTraducoes
     from tradutor.controlador import ControladorApp
 
+    # Encerra limpa a janela moderna antes de instanciar a janela clássica
+    app_interface.update_idletasks()
+    app_interface.destroy()
+
+    mocker.patch.object(mod_classica, "HAS_DND", False)
     app = InterfaceClassica()
     try:
         model = OrquestradorTraducoes()
@@ -126,20 +221,5 @@ def test_inicializacao_interface_classica():
         assert app._controller is controller
         assert "Tradutor" in app.title()
     finally:
-        app.destroy()
-
-
-def test_header_redefinir_textos_mantem_consistencia_com_inicializacao():
-    """Garante que redefinir_textos() no HeaderView nao injeta prefixos inexistentes na criacao."""
-    from tradutor.interface import InterfaceGrafica
-
-    I18n.definir_idioma("pt-br")
-    app = InterfaceGrafica()
-    try:
-        texto_inicial_tema = app.header.btn_tema.cget("text")
-        texto_inicial_grimorio = app.header.btn_grimorio.cget("text")
-        app.header.redefinir_textos()
-        assert app.header.btn_tema.cget("text") == texto_inicial_tema
-        assert app.header.btn_grimorio.cget("text") == texto_inicial_grimorio
-    finally:
+        app.update_idletasks()
         app.destroy()
