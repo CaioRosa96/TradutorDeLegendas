@@ -26,6 +26,8 @@ def compilar_alvo(alvo_script: str, nome_saida: str, modo_onefile: bool = False)
     pyinstaller = obter_pyinstaller_exec()
     locales_origem = os.path.join(DIRETORIO_RAIZ, "tradutor", "locales")
     glossario_padrao = os.path.join(DIRETORIO_RAIZ, "glossario.txt")
+    licenca_mit = os.path.join(DIRETORIO_RAIZ, "LICENSE")
+    avisos_terceiros = os.path.join(DIRETORIO_RAIZ, "THIRD_PARTY_NOTICES.md")
     script_alvo = os.path.join(DIRETORIO_RAIZ, alvo_script)
 
     modo_flag = "--onefile" if modo_onefile else "--onedir"
@@ -40,6 +42,8 @@ def compilar_alvo(alvo_script: str, nome_saida: str, modo_onefile: bool = False)
         "--collect-data", "tkinterdnd2",
         "--add-data", f"{locales_origem};tradutor/locales",
         "--add-data", f"{glossario_padrao};.",
+        "--add-data", f"{licenca_mit};.",
+        "--add-data", f"{avisos_terceiros};.",
         "--add-data", f"{os.path.join(DIRETORIO_RAIZ, 'glossarios')};glossarios",
         "--distpath", os.path.join(DIRETORIO_RAIZ, "dist"),
         "--workpath", os.path.join(DIRETORIO_RAIZ, "build"),

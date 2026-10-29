@@ -102,6 +102,10 @@ python tests/e2e/test_srt_lote.py
 
 ---
 
-## Licença
+## Licença e Avisos de Terceiros
 
-Este projeto está licenciado sob os termos da licença MIT. Para mais detalhes, consulte o arquivo [LICENSE](LICENSE).
+- **Código-Fonte do Projeto:** Licenciado sob os termos da **Licença MIT**. Consulte o arquivo [LICENSE](LICENSE) para o texto integral.
+- **Ferramentas Externas e Componentes de Terceiros:**
+  - **MKVToolNix (`mkvmerge` / `mkvextract`):** Invocado como processo independente via linha de comando (`subprocess`). Os binários inalterados do MKVToolNix eventualmente incluídos em pacotes standalone nas Releases são regidos pela licença **GPLv2** (Copyright Moritz Bunkus), com código-fonte disponível em https://mkvtoolnix.download/source.html e https://gitlab.com/mbunkus/mkvtoolnix.
+  - **Mozilla Whisperfile / Llamafile:** Baixado sob demanda diretamente da Mozilla no Hugging Face, licenciado sob **Apache 2.0** (Llamafile) e **MIT** (`whisper.cpp` / OpenAI Whisper).
+  - Para a relação completa de avisos legais, licenças e links de código-fonte de terceiros, consulte o arquivo [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
