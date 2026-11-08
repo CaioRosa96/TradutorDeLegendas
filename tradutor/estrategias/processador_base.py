@@ -25,6 +25,7 @@ class ProcessadorArquivoBase(ABC):
         engine=None,
         ask_whisper_cb=None,
         ask_output_format_cb=None,
+        ask_dependencies_cb=None,
     ):
         self.log = log_cb
         self.update_progress = progress_cb
@@ -33,6 +34,7 @@ class ProcessadorArquivoBase(ABC):
         self.engine = engine
         self.ask_whisper = ask_whisper_cb
         self.ask_output_format = ask_output_format_cb
+        self.ask_dependencies = ask_dependencies_cb
 
     def process(self, origem, idioma_origem, idioma_destino, manter_legenda) -> bool:
         """Executa o pipeline padrão para um arquivo."""

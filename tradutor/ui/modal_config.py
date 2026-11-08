@@ -1,12 +1,17 @@
 """Janela modal de Configuracoes Gerais, IA Local, Armazenamento e Informacoes do Sistema."""
 
+import threading
 import webbrowser
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
+from ..atualizador import VerificadorAtualizacao
+from ..config import GerenciadorConfig
 from ..config_usuario import PreferenciasUsuario
 from ..cache import CacheTraducoes
 from ..i18n import I18n
+from ..instalador_dependencias import InstaladorDependencias
+from .modal_dependencias import ModalDependencias
 from .modal_whisper import PainelSeletorWhisper
 from .tema import CORES
 
@@ -163,6 +168,55 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         )
         self.lbl_sec_sis.pack(anchor="w", padx=16, pady=(12, 6))
 
+        frame_mkv = ctk.CTkFrame(
+            aba,
+            fg_color=CORES["bg_card"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            corner_radius=raio_card
+        )
+        frame_mkv.pack(fill="x", padx=14, pady=6)
+
+        self.lbl_mkv_status = ctk.CTkLabel(
+            frame_mkv,
+            text=self._obter_texto_status_mkv(),
+            font=(fonte_ui, 11),
+            text_color=CORES["destaque_verde"] if GerenciadorConfig.check_dependencies() else CORES["destaque_vermelho"],
+            justify="left",
+            wraplength=310
+        )
+        self.lbl_mkv_status.pack(side="left", padx=12, pady=10)
+
+        self.btn_mkv_config = ctk.CTkButton(
+            frame_mkv,
+            text=I18n.t("btn_mkv_configurar"),
+            font=(fonte_ui, 10, "bold"),
+            fg_color=CORES["destaque_azul"],
+            hover_color=CORES["destaque_azul_hover"],
+            text_color=CORES.get("btn_destaque_txt", "#ffffff"),
+            corner_radius=raio_card,
+            width=115,
+            height=28,
+            command=self._abrir_modal_dependencias
+        )
+        self.btn_mkv_config.pack(side="right", padx=(4, 12), pady=10)
+
+        self.btn_mkv_pasta = ctk.CTkButton(
+            frame_mkv,
+            text=I18n.t("btn_mkv_alterar_pasta"),
+            font=(fonte_ui, 10, "bold"),
+            fg_color=CORES["bg_sidebar"],
+            hover_color=CORES["bg_card_hover"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            text_color=CORES["texto_principal"],
+            corner_radius=raio_card,
+            width=115,
+            height=28,
+            command=self._selecionar_pasta_mkv_manual
+        )
+        self.btn_mkv_pasta.pack(side="right", padx=4, pady=10)
+
         frame_sob = ctk.CTkFrame(
             aba,
             fg_color=CORES["bg_card"],
@@ -307,8 +361,11 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         )
         self.lbl_sobre_desc.pack(pady=8)
 
+        frame_acoes_sobre = ctk.CTkFrame(aba, fg_color="transparent")
+        frame_acoes_sobre.pack(pady=10)
+
         self.btn_github = ctk.CTkButton(
-            aba,
+            frame_acoes_sobre,
             text=I18n.t("btn_github"),
             font=(fonte_ui, 11, "bold"),
             fg_color=CORES["destaque_azul"],
@@ -316,9 +373,45 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             text_color=CORES.get("btn_destaque_txt", "#ffffff"),
             corner_radius=raio_card,
             height=32,
-            command=lambda: webbrowser.open_new_tab("https://github.com/Xaxadox/TradutorDeLegendas")
+            command=lambda: webbrowser.open_new_tab(VerificadorAtualizacao.URL_REPOSITORIO)
         )
-        self.btn_github.pack(pady=16)
+        self.btn_github.pack(side="left", padx=6)
+
+        self.btn_verificar_update = ctk.CTkButton(
+            frame_acoes_sobre,
+            text=I18n.t("btn_verificar_atualizacao"),
+            font=(fonte_ui, 11, "bold"),
+            fg_color=CORES["bg_card"],
+            hover_color=CORES["bg_card_hover"],
+            border_color=CORES["borda_card"],
+            border_width=CORES.get("borda_largura", 1),
+            text_color=CORES["texto_principal"],
+            corner_radius=raio_card,
+            height=32,
+            command=self._iniciar_verificacao_atualizacao
+        )
+        self.btn_verificar_update.pack(side="left", padx=6)
+
+        self.lbl_status_update = ctk.CTkLabel(
+            aba,
+            text="",
+            font=(fonte_ui, 11),
+            text_color=CORES["texto_secundario"]
+        )
+        self.lbl_status_update.pack(pady=(2, 4))
+
+        self.btn_creditos_autor = ctk.CTkButton(
+            aba,
+            text=I18n.t("lbl_creditos_autor"),
+            font=(fonte_ui, 11, "underline"),
+            fg_color="transparent",
+            hover_color=CORES["bg_card_hover"],
+            text_color=CORES["destaque_azul"],
+            corner_radius=raio_card,
+            height=26,
+            command=lambda: webbrowser.open_new_tab(VerificadorAtualizacao.URL_PERFIL_AUTOR)
+        )
+        self.btn_creditos_autor.pack(pady=(4, 2))
 
         self.lbl_licenca = ctk.CTkLabel(
             aba,
@@ -327,6 +420,87 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             text_color=CORES["texto_escuro"]
         )
         self.lbl_licenca.pack(side="bottom", pady=12)
+
+    def _iniciar_verificacao_atualizacao(self):
+        self.btn_verificar_update.configure(state="disabled")
+        self.lbl_status_update.configure(
+            text=I18n.t("lbl_verificando_atualizacao"),
+            text_color=CORES["texto_secundario"]
+        )
+
+        def _worker():
+            resultado = VerificadorAtualizacao.verificar()
+            try:
+                self.after(0, lambda: self._exibir_resultado_atualizacao(resultado))
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _exibir_resultado_atualizacao(self, resultado):
+        if not self.winfo_exists():
+            return
+        if not resultado.sucesso:
+            self.btn_verificar_update.configure(
+                state="normal",
+                text=I18n.t("btn_verificar_atualizacao"),
+                command=self._iniciar_verificacao_atualizacao
+            )
+            self.lbl_status_update.configure(
+                text=I18n.t("lbl_erro_atualizacao"),
+                text_color=CORES["destaque_vermelho"]
+            )
+            return
+
+        if resultado.atualizacao_disponivel:
+            self.lbl_status_update.configure(
+                text=I18n.t("lbl_nova_versao_disponivel").format(
+                    resultado.versao_remota, resultado.versao_atual
+                ),
+                text_color=CORES["destaque_verde"]
+            )
+            self.btn_verificar_update.configure(
+                state="normal",
+                text=I18n.t("btn_baixar_atualizacao").format(resultado.versao_remota),
+                fg_color=CORES["destaque_verde"],
+                hover_color=CORES["destaque_verde_hover"],
+                text_color=CORES.get("btn_iniciar_txt", "#ffffff"),
+                command=lambda: webbrowser.open_new_tab(resultado.url_download)
+            )
+        else:
+            self.btn_verificar_update.configure(
+                state="normal",
+                text=I18n.t("btn_verificar_atualizacao"),
+                command=self._iniciar_verificacao_atualizacao
+            )
+            self.lbl_status_update.configure(
+                text=I18n.t("lbl_atualizado").format(resultado.versao_atual),
+                text_color=CORES["destaque_verde"]
+            )
+
+    def _obter_texto_status_mkv(self) -> str:
+        if GerenciadorConfig.check_dependencies():
+            return I18n.t("lbl_mkv_status_ok").format(GerenciadorConfig.get_mkvtoolnix_path())
+        return I18n.t("lbl_mkv_status_ausente")
+
+    def _atualizar_visual_status_mkv(self):
+        ok = GerenciadorConfig.check_dependencies()
+        self.lbl_mkv_status.configure(
+            text=self._obter_texto_status_mkv(),
+            text_color=CORES["destaque_verde"] if ok else CORES["destaque_vermelho"]
+        )
+
+    def _selecionar_pasta_mkv_manual(self):
+        pasta = filedialog.askdirectory(parent=self, title=I18n.t("btn_dep_outra_pasta"))
+        if not pasta:
+            return
+        sucesso, _ = InstaladorDependencias.definir_pasta_existente(pasta)
+        if not sucesso:
+            messagebox.showwarning(I18n.t("aviso_titulo"), I18n.t("lbl_dep_pasta_invalida"), parent=self)
+        self._atualizar_visual_status_mkv()
+
+    def _abrir_modal_dependencias(self):
+        ModalDependencias(self, ao_decidir_cb=lambda _: self._atualizar_visual_status_mkv())
 
     def _obter_texto_cache(self) -> str:
         total = self._cache.contar_traducoes()
@@ -372,6 +546,9 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         self.sw_forcar_whisper.configure(text=I18n.t("sw_forcar_transcricao"))
 
         self.lbl_sec_sis.configure(text=I18n.t("sec_sistema"))
+        self._atualizar_visual_status_mkv()
+        self.btn_mkv_pasta.configure(text=I18n.t("btn_mkv_alterar_pasta"))
+        self.btn_mkv_config.configure(text=I18n.t("btn_mkv_configurar"))
         self.lbl_conflito_tit.configure(text=I18n.t("lbl_conflito"))
         self.politicas_map = {
             "perguntar": I18n.t("opt_perguntar"),
@@ -411,6 +588,8 @@ class ModalConfiguracoes(ctk.CTkToplevel):
         self.lbl_sobre_versao.configure(text=f"{I18n.t('lbl_versao')} (Lossless Modern UI)")
         self.lbl_sobre_desc.configure(text=I18n.t("desc_sobre"))
         self.btn_github.configure(text=I18n.t("btn_github"))
+        self.btn_verificar_update.configure(text=I18n.t("btn_verificar_atualizacao"))
+        self.btn_creditos_autor.configure(text=I18n.t("lbl_creditos_autor"))
         self.lbl_licenca.configure(text=I18n.t("lbl_licenca"))
 
     def _confirmar_limpeza_cache(self):

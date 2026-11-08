@@ -18,6 +18,7 @@ class PreferenciasUsuario:
         "politica_sobrescrita": "perguntar",  # "perguntar", "sobrescrever", "pular"
         "formato_saida_video": "perguntar",  # "perguntar", "converter_mkv", "manter_original"
         "mkvtoolnix_custom": "",
+        "ffmpeg_custom": "",
         "auto_alimentar_anilist": True,
         "transcricao_habilitada": False,
         "modelo_whisper": "small",  # "tiny", "small", "medium", "large-v3"

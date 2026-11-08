@@ -17,6 +17,7 @@ class ControladorApp:
             finish_cb=self._view.on_processing_finished,
             ask_whisper_cb=getattr(self._view, "ask_whisper_permission", None),
             ask_output_format_cb=getattr(self._view, "ask_output_format", None),
+            ask_dependencies_cb=getattr(self._view, "ask_dependencies", None),
         )
 
     @property

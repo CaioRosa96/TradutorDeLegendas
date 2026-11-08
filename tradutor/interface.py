@@ -29,11 +29,14 @@ from .ui import (
     ModalGrimorio,
     ModalConfiguracoes,
     ModalTemas,
-    ModalConfirmacaoWhisper
+    ModalConfirmacaoWhisper,
+    ModalDependencias,
 )
+from .config import GerenciadorConfig
 from .config_usuario import PreferenciasUsuario
 from .idiomas import Idiomas
 from .i18n import I18n
+from .som import tocar_som_conclusao
 
 
 class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
@@ -151,6 +154,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             novos = [f for f in files if f not in self.files]
             self.files.extend(novos)
             self._sincronizar_fila()
+            self._verificar_dependencias_video(novos)
 
     def _on_files_dropped(self, event):
         if not HAS_DND:
@@ -161,8 +165,27 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         if validos:
             self.files.extend(validos)
             self._sincronizar_fila()
+            self._verificar_dependencias_video(validos)
         else:
             messagebox.showwarning(I18n.t("aviso_titulo"), I18n.t("aviso_nenhum_arquivo_valido"))
+
+    def _verificar_dependencias_video(self, arquivos: list, ao_confirmar_cb=None):
+        """Exibe a janela de escolha caso haja videos e o MKVToolNix nao seja encontrado."""
+        extensoes_video = ('.mkv', '.mp4', '.webm', '.avi', '.wmv')
+        possui_video = any(f.lower().endswith(extensoes_video) for f in arquivos)
+        if not possui_video or GerenciadorConfig.check_dependencies():
+            if ao_confirmar_cb:
+                ao_confirmar_cb()
+            return
+
+        def _ao_decidir(resolvido: bool):
+            if resolvido:
+                if self._controller:
+                    self._controller.on_files_selected(self.files)
+                if ao_confirmar_cb:
+                    ao_confirmar_cb()
+
+        ModalDependencias(self, ao_decidir_cb=_ao_decidir)
 
     def _esta_em_execucao(self) -> bool:
         """Verifica se há um lote em processamento ativo na interface ou no controlador."""
@@ -224,11 +247,14 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
 
     def _on_start_clicked(self):
         if self._controller and self.files:
-            self._controller.start_translation(
+            self._verificar_dependencias_video(
                 self.files,
-                self.sidebar.idioma_origem,
-                self.sidebar.idioma_destino,
-                self.sidebar.manter_legenda
+                ao_confirmar_cb=lambda: self._controller.start_translation(
+                    self.files,
+                    self.sidebar.idioma_origem,
+                    self.sidebar.idioma_destino,
+                    self.sidebar.manter_legenda,
+                ),
             )
 
     def _on_cancel_clicked(self):
@@ -324,6 +350,22 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         evento.wait()
         return resposta[0]
 
+    def ask_dependencies(self) -> bool:
+        """Exibe de forma thread-safe a janela de escolha para instalar ou localizar o MKVToolNix."""
+        if GerenciadorConfig.check_dependencies():
+            return True
+
+        evento = threading.Event()
+        resposta = [False]
+
+        def _decidir(resolvido: bool):
+            resposta[0] = resolvido
+            evento.set()
+
+        self.after(0, lambda: ModalDependencias(self, ao_decidir_cb=_decidir))
+        evento.wait()
+        return resposta[0]
+
     def ask_whisper_permission(self, nome_arquivo: str) -> bool:
         """Exibe modal interativo de permissao, diagnostico de video e selecao/download de modelo da IA local Whisperfile."""
         caminho_completo = (
@@ -372,11 +414,8 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             self.footer.configurar_modo_pronto(len(self.files) > 0)
             self.fila.set_interativo(True)
             self.footer.set_status(I18n.t("status_concluido"))
-            if PreferenciasUsuario.obter("tocar_som", True) and winsound:
-                try:
-                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
-                except Exception:
-                    pass
+            if PreferenciasUsuario.obter("tocar_som", True):
+                tocar_som_conclusao()
             if PreferenciasUsuario.obter("abrir_pasta_ao_concluir", False) and self.files:
                 try:
                     pasta_destino = os.path.dirname(self.files[0])

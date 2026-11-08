@@ -18,8 +18,14 @@ class ProcessadorMkv(ProcessadorArquivoBase):
     def prepare(self, origem, idioma_origem):
         self._transcrito_por_ia = False
         if not GerenciadorConfig.check_dependencies():
-            self.log("[AVISO] Processamento abortado. MKVToolNix não encontrado.")
-            return None, None
+            if self.ask_dependencies is not None:
+                self.log("[AVISO] MKVToolNix não encontrado. Aguardando configuração pelo usuário...")
+                if not self.ask_dependencies():
+                    self.log("[AVISO] Processamento abortado. MKVToolNix não configurado.")
+                    return None, None
+            if not GerenciadorConfig.check_dependencies():
+                self.log("[AVISO] Processamento abortado. MKVToolNix não encontrado.")
+                return None, None
 
         destino_dir = os.path.dirname(origem)
         forcar_whisper = bool(PreferenciasUsuario.obter("forcar_transcricao", False))

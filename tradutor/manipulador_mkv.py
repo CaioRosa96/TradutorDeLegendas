@@ -44,14 +44,8 @@ class ManipuladorMkv:
 
     @staticmethod
     def _localizar_ffmpeg():
-        """Localiza um binário ffmpeg portátil ou no PATH do sistema, se disponível."""
-        for pasta_base in (GerenciadorConfig.DIRETORIO_EXECUCAO, GerenciadorConfig.DIRETORIO_RECURSOS):
-            for sub in ("bin", "mkvtoolnix"):
-                candidato = os.path.join(pasta_base, sub, "ffmpeg.exe")
-                if os.path.isfile(candidato):
-                    return os.path.abspath(candidato)
-        no_path = shutil.which("ffmpeg")
-        return os.path.abspath(no_path) if no_path else None
+        """Localiza um binário ffmpeg configurado pelo usuário, portátil ou no PATH do sistema."""
+        return GerenciadorConfig.get_ffmpeg_path()
 
     @staticmethod
     def listar_idiomas_legendas(caminhos_mkv):

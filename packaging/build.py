@@ -50,38 +50,21 @@ def compilar_alvo(alvo_script: str, nome_saida: str, modo_onefile: bool = False)
         "--specpath", os.path.join(DIRETORIO_RAIZ, "packaging"),
     ]
 
-    sys.path.insert(0, DIRETORIO_RAIZ)
-    from tradutor.config import GerenciadorConfig
-    mkvmerge_path, mkvextract_path = GerenciadorConfig.get_mkv_bins()
-    if os.path.exists(mkvmerge_path) and os.path.exists(mkvextract_path):
-        cmd.extend([
-            "--add-binary", f"{mkvmerge_path};mkvtoolnix",
-            "--add-binary", f"{mkvextract_path};mkvtoolnix"
-        ])
-
     cmd.append(script_alvo)
 
-    print(f"\n[BUILD] Iniciando compilação: {nome_saida} ({modo_flag})...")
+    print(f"\n[BUILD] Iniciando compilação (100% MIT, sem binários GPL embutidos): {nome_saida} ({modo_flag})...")
     subprocess.run(cmd, check=True)
     print(f"[BUILD] Concluído com sucesso: {nome_saida}")
 
-    # No modo onedir, copia recursos portateis para a pasta gerada
+    # No modo onedir, copia apenas recursos de dados sob licença MIT (glossários)
     if not modo_onefile:
         pasta_destino = os.path.join(DIRETORIO_RAIZ, "dist", nome_saida)
         if os.path.exists(pasta_destino):
-            # 1. Copia pasta de glossarios
             origem_gloss = os.path.join(DIRETORIO_RAIZ, "glossarios")
             dest_gloss = os.path.join(pasta_destino, "glossarios")
             if os.path.exists(origem_gloss):
                 shutil.copytree(origem_gloss, dest_gloss, dirs_exist_ok=True)
                 print(f"[BUILD] Glossários copiados para: {dest_gloss}")
-
-            # 2. Copia pasta mkvtoolnix se existir
-            origem_mkv = os.path.join(DIRETORIO_RAIZ, "mkvtoolnix")
-            dest_mkv = os.path.join(pasta_destino, "mkvtoolnix")
-            if os.path.exists(origem_mkv):
-                shutil.copytree(origem_mkv, dest_mkv, dirs_exist_ok=True)
-                print(f"[BUILD] MKVToolNix portátil copiado para: {dest_mkv}")
 
 
 def main():

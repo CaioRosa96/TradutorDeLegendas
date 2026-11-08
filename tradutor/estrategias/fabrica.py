@@ -18,6 +18,7 @@ class FabricaProcessadores:
         engine=None,
         ask_whisper_cb=None,
         ask_output_format_cb=None,
+        ask_dependencies_cb=None,
     ):
         ext = filepath.lower()
         if ext.endswith(FabricaProcessadores.EXTENSOES_VIDEO):
@@ -29,6 +30,7 @@ class FabricaProcessadores:
                 engine=engine,
                 ask_whisper_cb=ask_whisper_cb,
                 ask_output_format_cb=ask_output_format_cb,
+                ask_dependencies_cb=ask_dependencies_cb,
             )
         elif ext.endswith(FabricaProcessadores.EXTENSOES_LEGENDA):
             return ProcessadorSrt(
@@ -39,6 +41,7 @@ class FabricaProcessadores:
                 engine=engine,
                 ask_whisper_cb=ask_whisper_cb,
                 ask_output_format_cb=ask_output_format_cb,
+                ask_dependencies_cb=ask_dependencies_cb,
             )
         else:
             raise ValueError(f"Formato não suportado pela Fábrica: {filepath}")

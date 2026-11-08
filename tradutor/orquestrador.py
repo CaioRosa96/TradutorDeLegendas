@@ -26,7 +26,16 @@ class OrquestradorTraducoes:
         """Indica se há um lote em execução no momento."""
         return self._is_running
 
-    def set_callbacks(self, log_cb, progress_cb, ask_overwrite_cb, finish_cb, ask_whisper_cb=None, ask_output_format_cb=None):
+    def set_callbacks(
+        self,
+        log_cb,
+        progress_cb,
+        ask_overwrite_cb,
+        finish_cb,
+        ask_whisper_cb=None,
+        ask_output_format_cb=None,
+        ask_dependencies_cb=None,
+    ):
         """Registra os callbacks de comunicação com a camada de apresentação."""
         def custom_log(msg):
             # Salva silenciosamente em arquivo
@@ -40,6 +49,7 @@ class OrquestradorTraducoes:
         self._callbacks['finish'] = finish_cb
         self._callbacks['ask_whisper'] = ask_whisper_cb
         self._callbacks['ask_output_format'] = ask_output_format_cb
+        self._callbacks['ask_dependencies'] = ask_dependencies_cb
 
     def start(self, files, idioma_origem, idioma_destino, manter_legenda) -> bool:
         """Inicia o processamento em lote em uma thread separada, impedindo execuções duplicadas."""
@@ -65,6 +75,7 @@ class OrquestradorTraducoes:
         ask_overwrite = self._callbacks.get('ask_overwrite', lambda x: False)
         ask_whisper = self._callbacks.get('ask_whisper', None)
         ask_output_format = self._callbacks.get('ask_output_format', None)
+        ask_dependencies = self._callbacks.get('ask_dependencies', None)
         update_progress = self._callbacks.get('progress', lambda c, t: None)
         on_finish = self._callbacks.get('finish', lambda: None)
 
@@ -101,6 +112,7 @@ class OrquestradorTraducoes:
                         engine=engine_compartilhado,
                         ask_whisper_cb=ask_whisper,
                         ask_output_format_cb=ask_output_format,
+                        ask_dependencies_cb=ask_dependencies,
                     )
                     resultado = processador.process(origem, idioma_origem, idioma_destino, manter_legenda)
 

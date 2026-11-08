@@ -9,6 +9,7 @@ from .modal_grimorio import ModalGrimorio
 from .modal_config import ModalConfiguracoes
 from .modal_tema import ModalTemas
 from .modal_whisper import ModalConfirmacaoWhisper, PainelSeletorWhisper
+from .modal_dependencias import ModalDependencias
 
 __all__ = [
     "CORES",
@@ -26,4 +27,5 @@ __all__ = [
     "ModalTemas",
     "ModalConfirmacaoWhisper",
     "PainelSeletorWhisper",
+    "ModalDependencias",
 ]
