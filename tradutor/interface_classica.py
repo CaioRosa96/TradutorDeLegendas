@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 from .idiomas import Idiomas
+from .som import tocar_som_conclusao
 
 try:
     import winsound
@@ -270,11 +271,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             self.lbl_files.configure(
                 text="✅ Concluído! Escolha uma opção abaixo.", text_color="#2ecc71"
             )
-            if winsound:
-                try:
-                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
-                except Exception:
-                    pass
+            tocar_som_conclusao()
         self.after(0, _update_ui)
 
     def _voltar_para_selecao(self):
