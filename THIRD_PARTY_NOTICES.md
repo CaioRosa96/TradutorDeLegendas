@@ -13,7 +13,7 @@ Abaixo estão listados os avisos de direitos autorais, licenças e links para ob
 - **Autor / Copyright:** Copyright (c) Moritz Bunkus e colaboradores.
 - **Licença:** GNU General Public License, Version 2 (GPLv2).
 - **Forma de Integração:** Executado exclusivamente como processo externo independente via linha de comando (`mkvmerge -J`, `mkvmerge -o`, `mkvextract tracks`), sem linkagem estática ou dinâmica com o código Python deste repositório e sem qualquer modificação nos binários originais.
-- **Distribuição em Executáveis Standalone (Releases):** Quando os binários inalterados `mkvmerge.exe` e `mkvextract.exe` acompanham os pacotes portáteis distribuídos nas Releases do GitHub, sua distribuição ocorre sob os termos da licença **GPLv2** (Seção 3).
+- **Política de Distribuição nas Releases (100% MIT):** Os executáveis `TradutorLegendas.exe` e `TradutorLegendas_Classico.exe` publicados nas Releases do GitHub **não trazem binários sob licença GPLv2 embutidos**. Caso o usuário deseje processar arquivos de vídeo e `mkvmerge.exe` / `mkvextract.exe` não sejam detectados na pasta local (`mkvtoolnix/`), na instalação padrão do Windows (`C:\Program Files\MKVToolNix`) ou em outra pasta configurada pelo usuário, o aplicativo exibe uma janela de escolha permitindo baixá-los sob demanda ou apontar uma instalação já existente no computador.
 - **Texto Integral da Licença GPLv2:** https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 - **Código-Fonte Oficial do MKVToolNix:**
   - Página oficial de código-fonte: https://mkvtoolnix.download/source.html

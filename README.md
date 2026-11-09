@@ -1,10 +1,25 @@
 # Tradutor de Legendas
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/Xaxadox/TradutorDeLegendas/tests.yml?style=flat-square&label=Testes%20CI)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/CaioRosa96/TradutorDeLegendas/tests.yml?style=flat-square&label=Testes%20CI)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=flat-square)
 ![Licença](https://img.shields.io/badge/Licen%C3%A7a-MIT-green?style=flat-square)
 
 O **Tradutor de Legendas** é uma ferramenta de automação para extração, transcrição opcional de áudio via IA local, tradução e multiplexação de legendas em arquivos de vídeo (`.mkv`, `.mp4`, `.webm`, `.avi` e `.wmv`), bem como legendas avulsas nos formatos SRT, ASS e TXT. O sistema emprega processamento assíncrono para garantir alto desempenho, acompanhado por tolerância a falhas, cache persistente local em dois níveis e proteção de contexto via glossário dinâmico.
+
+---
+
+## Uso Rápido (Executável Portátil para Windows)
+
+Se você deseja apenas utilizar o aplicativo sem instalar Python ou configurar ambiente de desenvolvimento:
+
+1. Acesse a página de [**Releases**](https://github.com/CaioRosa96/TradutorDeLegendas/releases/latest) e baixe o arquivo **`TradutorLegendas.exe`** (ou `TradutorLegendas_Classico.exe` para a interface clássica).
+2. Execute o arquivo baixado diretamente em qualquer pasta com permissão de escrita.
+3. Arraste seus vídeos (`.mkv`, `.mp4`, `.webm`, `.avi`, `.wmv`) ou legendas (`.srt`, `.ass`, `.txt`) para a janela, escolha o idioma de destino e clique em **Iniciar Tradução**.
+
+> [!WARNING]
+> **Aviso do Windows SmartScreen ("O Windows protegeu o computador"):**
+> Como este é um projeto independente de código aberto e o executável não possui um certificado comercial pago (EV Code Signing), o Windows pode exibir um alerta na primeira execução.
+> Para prosseguir normalmente, clique em **Mais informações** e, em seguida, no botão **Executar assim mesmo**. Você também pode validar a integridade do binário conferindo o hash no arquivo `SHA256SUMS.txt` anexado à Release ou executar diretamente a partir do código-fonte via `iniciar.bat`.
 
 ---
 
@@ -24,7 +39,7 @@ O **Tradutor de Legendas** é uma ferramenta de automação para extração, tra
 
 - **Circuit Breaker (Disjuntor de Rede Compartilhado):** O motor de tradução monitora falhas consecutivas da API sob lock de granularidade fina e compartilha o estado do disjuntor ao longo de toda a fila de arquivos no `OrquestradorTraducoes`.
 - **Fallback Sequencial Resiliente:** Se a tradução em lote apresentar discrepância na contagem de linhas retornadas, o sistema comuta automaticamente para tradução individual item a item com consulta ao cache.
-- **Auditoria Estruturada de Logs:** Toda a operação do sistema é gravada em arquivos rotativos na pasta `logs/`, contendo níveis de severidade, contexto e timestamps detalhados.
+- **Auditoria Estruturada de Logs com Rotação e Teto de Disco:** Toda a operação do sistema é gravada em arquivos diários na pasta `logs/` (com fallback automático para `%LOCALAPPDATA%` quando executado em diretórios protegidos), retenção automática dos últimos 7 dias, teto de 20 MB por arquivo diário, cabeçalho de diagnóstico real do Windows 10/11 e captura global de exceções não tratadas (`sys.excepthook` / `threading.excepthook`).
 
 ---
 
@@ -44,10 +59,10 @@ O projeto é estruturado segundo os princípios de separação de responsabilida
 ## Instalação e Execução
 
 ### Pré-requisitos
-- Python 3.11 ou superior.
-- MKVToolNix e FFmpeg (para processamento de contêineres de vídeo e áudio):
-  - **Opção 1 (Automática/Sistema):** O script `iniciar.bat` detecta a instalação em `C:\Program Files\MKVToolNix` ou instala automaticamente via `winget`.
-  - **Opção 2 (Portátil):** Coloque os executáveis `mkvmerge.exe`, `mkvextract.exe` e `ffmpeg.exe` na pasta `mkvtoolnix/` ou `bin/` na raiz do projeto.
+- Python 3.11 ou superior (caso execute pelo código-fonte).
+- MKVToolNix e FFmpeg (necessários apenas para processamento de contêineres de vídeo; legendas `.srt`/`.ass`/`.txt` avulsas não exigem ferramentas externas):
+  - **Opção 1 (Assistente Integrado na Interface):** Caso os binários não sejam encontrados na pasta local (`mkvtoolnix/` ou `bin/`) nem na pasta padrão (`C:\Program Files\MKVToolNix`), o aplicativo exibe automaticamente uma janela de escolha permitindo **baixá-los sob demanda** ou **selecionar outra pasta** do computador onde já estejam instalados.
+  - **Opção 2 (Script `iniciar.bat`):** Detecta a instalação padrão no sistema ou instala automaticamente via `winget`.
 - *(Opcional)* Mozilla Whisperfile para transcrição de vídeos sem legenda:
   - O próprio aplicativo oferece catálogo integrado nas Configurações e no modal de confirmação para baixar sob demanda os modelos `tiny`, `small`, `medium` ou `large-v3` diretamente para a pasta `bin/`.
 
@@ -57,7 +72,7 @@ Dê um duplo clique no arquivo **`iniciar.bat`**. O script configura automaticam
 ### Execução Manual
 ```bash
 # Clone o repositório
-git clone https://github.com/Xaxadox/TradutorDeLegendas.git
+git clone https://github.com/CaioRosa96/TradutorDeLegendas.git
 
 # Crie e ative o ambiente virtual
 python -m venv venv
@@ -74,7 +89,7 @@ python TradutorLegendas26.py
 
 ## Suíte de Testes e Qualidade
 
-O repositório possui cobertura de **166 testes unitários automatizados** com pytest, além de integração contínua (CI) via GitHub Actions.
+O repositório possui cobertura de **181 testes unitários automatizados** com pytest, além de integração contínua (CI) e publicação automatizada de Releases via GitHub Actions.
 
 ### Testes Unitários
 Os testes rodam de forma 100% offline, utilizando diretórios temporários e injeção de mocks:
@@ -91,7 +106,9 @@ Você também pode rodar os testes diretamente pelo script auxiliar **`testar.ba
 - `test_servico_traducao.py`: Simulação assíncrona da API, cache em dois níveis e fallback sequencial.
 - `test_transcritor_whisper.py`: Resolução de binário Whisperfile, conversão FFmpeg WAV 16 kHz e fallback MKV.
 - `test_alimentar_glossario.py`: Sanitização de nomes de arquivo e integração mockada com a API AniList.
-- `test_tema.py` e `test_config_e_modais.py`: Contraste matemático WCAG 2.x nos 4 temas, i18n em 5 idiomas e modais.
+- `test_tema.py` e `test_config_e_modais.py`: Contraste matemático WCAG 2.x nos 4 temas, contrato de paridade de chaves e placeholders `{n}` nos 5 idiomas de i18n e modais.
+- `test_logger_atualizador_som.py`: Logger resiliente (retenção de 7 dias, teto de 20 MB e fallback `%LOCALAPPDATA%`), verificador semântico de atualizações (`VerificadorAtualizacao`) e síntese de áudio WAV PCM em memória (`gerar_wav_acorde_conclusao`).
+- `test_instalador_dependencias.py`: Prioridade de pasta customizada do usuário fora das pastas padrão, validação de diretórios, download portátil sob demanda e solicitação contextual do MKVToolNix.
 - `test_idiomas.py`: Conversão bidirecional entre códigos ISO-639-2 e códigos do Google Translate.
 
 ### Teste E2E (End-to-End)
@@ -106,6 +123,6 @@ python tests/e2e/test_srt_lote.py
 
 - **Código-Fonte do Projeto:** Licenciado sob os termos da **Licença MIT**. Consulte o arquivo [LICENSE](LICENSE) para o texto integral.
 - **Ferramentas Externas e Componentes de Terceiros:**
-  - **MKVToolNix (`mkvmerge` / `mkvextract`):** Invocado como processo independente via linha de comando (`subprocess`). Os binários inalterados do MKVToolNix eventualmente incluídos em pacotes standalone nas Releases são regidos pela licença **GPLv2** (Copyright Moritz Bunkus), com código-fonte disponível em https://mkvtoolnix.download/source.html e https://gitlab.com/mbunkus/mkvtoolnix.
+  - **MKVToolNix (`mkvmerge` / `mkvextract`):** Licenciado sob **GPLv2** (Copyright Moritz Bunkus). Por conformidade estrita com a licença **MIT** deste repositório, os executáveis distribuídos nas Releases **não embutem binários GPLv2**: o aplicativo invoca a instalação já presente no computador do usuário (na pasta local, pasta padrão ou pasta customizada) ou oferece o download sob demanda mediante confirmação explícita. Código-fonte oficial do MKVToolNix em https://mkvtoolnix.download/source.html e https://gitlab.com/mbunkus/mkvtoolnix.
   - **Mozilla Whisperfile / Llamafile:** Baixado sob demanda diretamente da Mozilla no Hugging Face, licenciado sob **Apache 2.0** (Llamafile) e **MIT** (`whisper.cpp` / OpenAI Whisper).
   - Para a relação completa de avisos legais, licenças e links de código-fonte de terceiros, consulte o arquivo [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
