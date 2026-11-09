@@ -1,0 +1,79 @@
+name: Publicar Release (Windows Standalone)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag da versao para publicar (ex: v2.8.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias e PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Executar Testes Unitarios de Verificacao
+        run: |
+          pytest tests/unit/ -v
+
+      - name: Compilar Executaveis Standalone (.exe)
+        run: |
+          python packaging/build.py --alvo todos --onefile
+          Get-ChildItem dist\*.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -FilePath dist\SHA256SUMS.txt -Append -Encoding utf8
+          }
+
+      - name: Extrair notas da versao do CHANGELOG.md
+        shell: pwsh
+        run: |
+          $tagName = "${{ github.event.inputs.tag || github.ref_name }}"
+          $version = $tagName -replace '^v', ''
+          $changelog = Get-Content CHANGELOG.md -Raw -Encoding UTF8
+          $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)"
+          $match = [regex]::Match($changelog, $pattern)
+          if ($match.Success) {
+            $notes = $match.Groups[1].Value.Trim()
+          } else {
+            $notes = "Release automatica da versao $tagName."
+          }
+          $notes | Out-File -FilePath release_notes.md -Encoding utf8
+
+      - name: Publicar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Tradutor de Legendas ${{ github.event.inputs.tag || github.ref_name }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/TradutorLegendas.exe
+            dist/TradutorLegendas_Classico.exe
+            dist/SHA256SUMS.txt
+
