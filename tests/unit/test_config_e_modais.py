@@ -77,6 +77,65 @@ def test_i18n_traducoes_e_fallback():
     assert I18n.t("chave_inexistente_123") == "chave_inexistente_123"
 
 
+def test_locales_sem_chaves_duplicadas():
+    """Garante que nenhum arquivo JSON de idioma possui chaves duplicadas."""
+    import json
+
+    pasta_locales = I18n._diretorio_locales
+    for codigo in I18n.IDIOMAS_SUPORTADOS:
+        caminho = os.path.join(pasta_locales, f"{codigo}.json")
+        chaves_vistas = set()
+        duplicadas = []
+
+        def _verificar_pares(pares):
+            for k, v in pares:
+                if k in chaves_vistas:
+                    duplicadas.append(k)
+                chaves_vistas.add(k)
+            return dict(pares)
+
+        with open(caminho, "r", encoding="utf-8") as f:
+            json.load(f, object_pairs_hook=_verificar_pares)
+
+        assert not duplicadas, f"Chaves duplicadas em {codigo}.json: {duplicadas}"
+
+
+@pytest.mark.parametrize("codigo_idioma", ["en", "es", "ja", "zh-cn"])
+def test_contrato_paridade_chaves_e_placeholders_locales(codigo_idioma):
+    """Garante paridade de chaves, textos nao vazios e mesmos placeholders {n} contra pt-br."""
+    import json
+    import re
+
+    padrao_placeholder = re.compile(r"\{[^}]+\}")
+    pasta_locales = I18n._diretorio_locales
+
+    with open(os.path.join(pasta_locales, "pt-br.json"), "r", encoding="utf-8") as f:
+        base_pt = json.load(f)
+
+    with open(os.path.join(pasta_locales, f"{codigo_idioma}.json"), "r", encoding="utf-8") as f:
+        alvo = json.load(f)
+
+    chaves_pt = set(base_pt.keys())
+    chaves_alvo = set(alvo.keys())
+
+    faltando = sorted(chaves_pt - chaves_alvo)
+    sobrando = sorted(chaves_alvo - chaves_pt)
+    assert not faltando, f"[{codigo_idioma}] Chaves ausentes em relacao ao pt-br: {faltando}"
+    assert not sobrando, f"[{codigo_idioma}] Chaves extras nao presentes no pt-br: {sobrando}"
+
+    for chave, texto_pt in base_pt.items():
+        texto_alvo = alvo[chave]
+        assert isinstance(texto_alvo, str) and texto_alvo.strip(), (
+            f"[{codigo_idioma}] Traducao vazia para a chave '{chave}'"
+        )
+        placeholders_pt = sorted(padrao_placeholder.findall(texto_pt))
+        placeholders_alvo = sorted(padrao_placeholder.findall(texto_alvo))
+        assert placeholders_alvo == placeholders_pt, (
+            f"[{codigo_idioma}] Placeholders divergentes na chave '{chave}': "
+            f"esperado {placeholders_pt}, obtido {placeholders_alvo}"
+        )
+
+
 def test_alternancia_de_temas():
     """Verifica que a alternancia entre os 4 temas atualiza a paleta ativa."""
     for nome_tema in ["escuro", "claro", "alto_contraste", "ms_dos"]:
@@ -196,10 +255,13 @@ def test_remover_item_durante_execucao_nao_reativa_botao_iniciar_nem_duplica_pro
         assert len(contagem_execucoes) == 1, "O Orquestrador permitiu duas execuções simultâneas em paralelo!"
     finally:
         evento_bloqueio.set()
+        if getattr(orq, "_thread", None) and orq._thread.is_alive():
+            orq._thread.join(timeout=2.0)
         app._em_execucao = False
         app.footer.configurar_modo_pronto(False)
         app.files = []
         app._sincronizar_fila()
+        app.update_idletasks()
 
 
 def test_inicializacao_interface_classica(app_interface, mocker):
