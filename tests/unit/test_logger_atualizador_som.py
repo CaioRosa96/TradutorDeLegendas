@@ -107,7 +107,7 @@ def test_handler_arquivo_com_teto_suprime_apos_limite(tmp_path):
 def test_cabecalho_sessao_e_deteccao_windows(monkeypatch):
     """Verifica a formatacao do cabecalho de sessao com versao e sistema operacional."""
     cabecalho = gerar_cabecalho_sessao()
-    assert "Tradutor de Legendas v2.8.0" in cabecalho
+    assert "Tradutor de Legendas v2.9.0" in cabecalho
     assert "Python" in cabecalho
     assert detectar_sistema_operacional() in cabecalho
 

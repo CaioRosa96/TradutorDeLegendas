@@ -1,4 +1,4 @@
-"""View layer: Orquestradora da Interface Grafica Moderna (v2.8.0).
+"""View layer: Orquestradora da Interface Grafica Moderna (v2.9.0).
 
 Monta a janela principal e orquestra a comunicacao entre os componentes
 visuais especializados (Header, Sidebar, Fila, Footer e Modais) e o ControladorApp.
@@ -47,7 +47,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         if HAS_DND:
             self.TkdndVersion = TkinterDnD._require(self)
 
-        self.title(f"{I18n.t('app_nome')} — v2.8.0")
+        self.title(f"{I18n.t('app_nome')} — v2.9.0")
         self.geometry("940x670")
         self.minsize(880, 600)
         self.configure(fg_color=CORES["bg_janela"])
@@ -133,7 +133,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.footer.aplicar_tema(cores)
 
     def _aplicar_novo_idioma(self, codigo_idioma: str):
-        self.title(f"{I18n.t('app_nome')} — v2.8.0")
+        self.title(f"{I18n.t('app_nome')} — v2.9.0")
         self.header.redefinir_textos()
         self.sidebar.redefinir_textos()
         self.fila.redefinir_textos(len(self.files))

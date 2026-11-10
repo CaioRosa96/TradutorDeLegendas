@@ -88,7 +88,7 @@
   "msg_cache_sucesso": "Translation cache cleared successfully!",
   "desc_sobre": "Autonomous, asynchronous processor for extracting, translating, and\nremuxing MKV/SRT subtitles with anti-hallucination entity\nprotection via dynamic glossaries and persistent cache.",
   "btn_github": "🌐 Open GitHub Repository",
-  "lbl_versao": "Version 2.8.0",
+  "lbl_versao": "Version 2.9.0",
   "lbl_licenca": "MIT License — Built with Python & CustomTkinter",
 
   "modal_grimorio_titulo": "📖 Grimoire of Terms & Characters (Anti-Hallucination)",

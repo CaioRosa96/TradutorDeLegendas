@@ -4,6 +4,24 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 
 ---
 
+## [2.9.0] - 2026-11-10
+
+### Adicionado
+- Desacoplamento completo de binários sob licença GPLv2 (`mkvmerge.exe` e `mkvextract.exe`) dos executáveis `.exe` das Releases (100% MIT), acompanhado do serviço `InstaladorDependencias` (`tradutor/instalador_dependencias.py`) e da janela `ModalDependencias` (`tradutor/ui/modal_dependencias.py`) para download sob demanda ou seleção manual de outra pasta pelo usuário.
+- Logger de produção (`tradutor/logger.py`) com retenção automática de 7 dias, teto diário de 20 MB por arquivo, sonda de escrita com fallback para `%LOCALAPPDATA%`, cabeçalho real do Windows 10/11 e captura global de exceções (`sys.excepthook` / `threading.excepthook`).
+- Verificador de atualizações in-app (`tradutor/atualizador.py`) e créditos clicáveis na aba Sobre do `ModalConfiguracoes`.
+- Sintetizador de acorde musical suave em memória RAM (`tradutor/som.py`) via `winsound.SND_MEMORY` ao concluir lotes de tradução, sem arquivos externos.
+- Workflow de publicação automática de Releases por tag (`.github/workflows/release.yml`) extraindo notas do `CHANGELOG.md` e gerando `SHA256SUMS.txt`.
+- Testes de contrato de paridade de chaves e placeholders `{n}` para todos os catálogos i18n (`tradutor/locales/*.json`).
+
+### Corrigido
+- Falha crítica de assinatura em `CacheTraducoes.put_many` ao persistir sub-frases traduzidas a partir de dicionário (`Mapping[str, str]`), que lançava `TypeError` e acionava o bloco de exceção do `ServicoTraducao._traduzir_lote`, revertendo as falas já traduzidas para o idioma original (inglês) na 1ª execução de episódios inéditos.
+- Isolamento *best-effort* de gravação no cache local (`_salvar_cache_seguro` e `_salvar_lote_cache_seguro`), impedindo que falhas de escrita no SQLite revertam legendas já traduzidas em memória.
+- Filtro de proteção contra gravação de linhas contendo tokens sintéticos de glossário (`TKGLOSS{n}T`) no cache individual de Nível 2 durante o fluxo de sub-lote parcial.
+- Isolamento do banco SQLite em diretório temporário durante a execução do teste E2E (`tests/e2e/test_srt_lote.py`), evitando gravação de entradas `[MOCK]` no banco local.
+
+---
+
 ## [2.8.0] - 2026-10-29
 
 ### Adicionado
@@ -12,12 +30,6 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 - Botão individual `Analisar IA` nos cards da fila de processamento (`CardArquivo`), exibido automaticamente apenas para vídeos sem legenda embutida.
 - Suporte nativo a múltiplos contêineres de vídeo (`.mkv`, `.mp4`, `.webm`, `.avi`, `.wmv`) com política configurável de formato de saída: conversão sem perda via *stream copy* para `.mkv` ou manutenção do contêiner original (`mov_text` para MP4, `webvtt` para WebM e `.srt` externo para AVI/WMV).
 - Auto-alimentação opcional de glossários por obra integrada ao pipeline de tradução via API GraphQL do AniList (`auto_alimentar`).
-- Logger de produção (`tradutor/logger.py`) com retenção automática de 7 dias, teto diário de 20 MB por arquivo, sonda de escrita com fallback para `%LOCALAPPDATA%`, cabeçalho real do Windows 10/11 e captura global de exceções (`sys.excepthook` / `threading.excepthook`).
-- Verificador de atualizações in-app (`tradutor/atualizador.py`) e créditos clicáveis na aba Sobre do `ModalConfiguracoes`.
-- Sintetizador de acorde musical suave em memória RAM (`tradutor/som.py`) via `winsound.SND_MEMORY` ao concluir lotes de tradução, sem arquivos externos.
-- Workflow de publicação automática de Releases por tag (`.github/workflows/release.yml`) extraindo notas do `CHANGELOG.md` e gerando `SHA256SUMS.txt`.
-- Desacoplamento completo de binários sob licença GPLv2 (`mkvmerge.exe` e `mkvextract.exe`) dos executáveis `.exe` das Releases (100% MIT), acompanhado do serviço `InstaladorDependencias` (`tradutor/instalador_dependencias.py`) e da janela `ModalDependencias` (`tradutor/ui/modal_dependencias.py`) para download sob demanda ou seleção manual de outra pasta pelo usuário.
-- Testes de contrato de paridade de chaves e placeholders `{n}` para todos os catálogos i18n (`tradutor/locales/*.json`).
 - Arquivo `THIRD_PARTY_NOTICES.md` detalhando licenças e links de código-fonte de componentes externos (MKVToolNix sob GPLv2, Mozilla Whisperfile sob Apache 2.0/MIT e FFmpeg).
 
 ### Alterado

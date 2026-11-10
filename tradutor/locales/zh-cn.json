@@ -88,7 +88,7 @@
   "msg_cache_sucesso": "翻译缓存库已成功清空！",
   "desc_sobre": "自主异步提取、翻译与封装 MKV/SRT 字幕的高性能处理器，\n通过动态词汇表与持久化缓存提供防幻觉保护。",
   "btn_github": "🌐 打开 GitHub 仓库",
-  "lbl_versao": "版本 2.8.0",
+  "lbl_versao": "版本 2.9.0",
   "lbl_licenca": "MIT 开源许可证 — 基于 Python 与 CustomTkinter 构建",
 
   "modal_grimorio_titulo": "📖 术语与人物魔导书 (防幻觉)",

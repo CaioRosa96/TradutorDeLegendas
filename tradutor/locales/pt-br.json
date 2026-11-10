@@ -88,7 +88,7 @@
   "msg_cache_sucesso": "Cache de traduções esvaziado com sucesso!",
   "desc_sobre": "Processador autônomo e assíncrono para extração, tradução e\nremultiplexação de legendas MKV e SRT com proteção de entidades\nanti-alucinação via glossários dinâmicos e cache persistente.",
   "btn_github": "🌐 Abrir Repositório no GitHub",
-  "lbl_versao": "Versão 2.8.0",
+  "lbl_versao": "Versão 2.9.0",
   "lbl_licenca": "Licença MIT — Desenvolvido com Python & CustomTkinter",
 
   "modal_grimorio_titulo": "📖 Grimório de Termos e Personagens (Anti-Alucinação)",

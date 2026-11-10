@@ -20,7 +20,7 @@ class ResultadoAtualizacao:
 class VerificadorAtualizacao:
     """Consulta a ultima release publicada no GitHub e compara semanticamente a versao."""
 
-    VERSAO_ATUAL = "2.8.0"
+    VERSAO_ATUAL = "2.9.0"
     URL_REPOSITORIO = "https://github.com/CaioRosa96/TradutorDeLegendas"
     URL_PERFIL_AUTOR = "https://github.com/CaioRosa96"
     URL_API_ULTIMA_RELEASE = (

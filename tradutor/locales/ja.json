@@ -88,7 +88,7 @@
   "msg_cache_sucesso": "翻訳キャッシュをクリアしました！",
   "desc_sobre": "動的用語集と永続キャッシュによる幻覚防止機能を備えた、\nMKVおよびSRT字幕の抽出・翻訳・再多重化を行う自律型非同期プロセッサ。",
   "btn_github": "🌐 GitHubリポジトリを開く",
-  "lbl_versao": "バージョン 2.8.0",
+  "lbl_versao": "バージョン 2.9.0",
   "lbl_licenca": "MITライセンス — PythonとCustomTkinterで開発",
 
   "modal_grimorio_titulo": "📖 用語と登場人物の魔導書 (幻覚防止)",

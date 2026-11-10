@@ -88,7 +88,7 @@
   "msg_cache_sucesso": "¡Caché de traducciones vaciada con éxito!",
   "desc_sobre": "Procesador autónomo y asíncrono para extracción, traducción y\nremultiplexación de subtítulos MKV y SRT con protección contra\nalucinaciones mediante glosarios dinámicos y caché persistente.",
   "btn_github": "🌐 Abrir Repositorio en GitHub",
-  "lbl_versao": "Versión 2.8.0",
+  "lbl_versao": "Versión 2.9.0",
   "lbl_licenca": "Licencia MIT — Desarrollado con Python y CustomTkinter",
 
   "modal_grimorio_titulo": "📖 Grimorio de Términos y Personajes (Anti-Alucinación)",
