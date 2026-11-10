@@ -8,6 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
+from tradutor.cache import CacheTraducoes
 from tradutor.config import GerenciadorConfig
 from tradutor.contratos import LinhaProtegida
 from tradutor.servico_traducao import ServicoTraducao
@@ -22,11 +23,11 @@ class EventoLegendaDummy:
 def servico_setup(mocker):
     """
     Fixture que cria uma instância de ServicoTraducao isolada:
-    - Sem Banco de Dados Real (Cache mockado)
+    - Sem Banco de Dados Real (Cache mockado com autospec estrito da classe real)
     - Sem Acesso a Disco (Glossario mockado)
     - Com Callbacks de log e progresso falsos.
     """
-    mocker.patch('tradutor.servico_traducao.CacheTraducoes')
+    mocker.patch('tradutor.servico_traducao.CacheTraducoes', autospec=True)
     mocker.patch('tradutor.servico_traducao.GerenciadorGlossario')
     mocker.patch.object(GerenciadorConfig, 'PAUSA_FALLBACK_SEGUNDOS', 0)
     
@@ -49,6 +50,7 @@ def servico_setup(mocker):
     
     # Mockando o comportamento do cache
     servico._cache.get.return_value = None
+    servico._cache.get_many.return_value = {}
     
     return servico, mock_engine, mock_logger, mock_progress
 
@@ -397,5 +399,150 @@ async def test_cache_put_many_e_reuso_parcial_subfrases_entre_episodios(servico_
         {"Episode 2 exclusive line": "Fala inedita do episodio 2"}, "auto", "pt"
     )
     assert [s.text for s in subs] == ["Linha de abertura 1", "Fala inedita do episodio 2"]
+
+
+@pytest.mark.asyncio
+async def test_regressao_primeira_execucao_com_cache_sqlite_real_traduz_para_portugues(tmp_path, mocker):
+    """
+    Reproduz o bug de produção (logs 04/11 e 10/11): na 1ª execução de qualquer episódio
+    inédito com CacheTraducoes real (SQLite), a chamada put_many(dict, src, dest) lançava
+    TypeError e revertia subs[idx].text de volta para o inglês.
+    """
+    mocker.patch("tradutor.servico_traducao.GerenciadorGlossario")
+    mocker.patch.object(GerenciadorConfig, "PAUSA_FALLBACK_SEGUNDOS", 0)
+
+    db_path = str(tmp_path / "cache_regressao_real.db")
+    cache_real = CacheTraducoes(db_path=db_path)
+
+    mock_logger = MagicMock()
+    mock_progress = MagicMock()
+    mock_engine = MagicMock()
+
+    servico = ServicoTraducao(
+        logger=mock_logger,
+        progress_callback=mock_progress,
+        engine=mock_engine,
+        video_filename="Anime_Ep01.mkv",
+    )
+    servico._cache = cache_real
+    servico._glossary.proteger.side_effect = lambda texto, id_linha=0: LinhaProtegida(
+        id_linha=id_linha, texto_original=texto, texto_mascarado=texto
+    )
+    servico._glossary.restaurar.side_effect = lambda texto, payload: texto
+
+    # 1) Lote completo inédito (1ª execução)
+    mock_engine.translate.return_value = "Olá mundo\nComo vai você?"
+    subs_ep1 = [EventoLegendaDummy("Hello world"), EventoLegendaDummy("How are you?")]
+    await _executar_lote(servico, subs_ep1)
+
+    assert [s.text for s in subs_ep1] == ["Olá mundo", "Como vai você?"]
+    assert cache_real.get("Hello world\nHow are you?", "auto", "pt") == "Olá mundo\nComo vai você?"
+    assert cache_real.get("Hello world", "auto", "pt") == "Olá mundo"
+    assert cache_real.get("How are you?", "auto", "pt") == "Como vai você?"
+
+    # 2) Sub-lote parcial no Episódio 2 (reaproveita "Hello world" do Nível 2 e traduz a inédita)
+    mock_engine.translate.reset_mock()
+    mock_engine.translate.return_value = "Esta é uma fala nova"
+    subs_ep2 = [EventoLegendaDummy("Hello world"), EventoLegendaDummy("This is a new line")]
+    await _executar_lote(servico, subs_ep2)
+
+    mock_engine.translate.assert_called_once_with("This is a new line", "auto", "pt")
+    assert [s.text for s in subs_ep2] == ["Olá mundo", "Esta é uma fala nova"]
+    assert cache_real.get("This is a new line", "auto", "pt") == "Esta é uma fala nova"
+
+    # 3) Fallback sequencial com cache real
+    mock_engine.translate.reset_mock()
+    mock_engine.translate.side_effect = [
+        "Bloco dessincronizado em 1 linha apenas",
+        "Fala fallback 1",
+        "Fala fallback 2",
+    ]
+    subs_ep3 = [EventoLegendaDummy("Fallback line 1"), EventoLegendaDummy("Fallback line 2")]
+    await _executar_lote(servico, subs_ep3)
+
+    assert [s.text for s in subs_ep3] == ["Fala fallback 1", "Fala fallback 2"]
+    assert cache_real.get("Fallback line 1", "auto", "pt") == "Fala fallback 1"
+    assert cache_real.get("Fallback line 2", "auto", "pt") == "Fala fallback 2"
+
+    logs = [c.args[0] for c in mock_logger.call_args_list]
+    assert not any("[Erro Crítico]" in msg for msg in logs)
+
+
+@pytest.mark.asyncio
+async def test_regressao_sub_lote_parcial_nao_salva_tokens_glossario_no_cache_nivel_2(tmp_path, mocker):
+    """
+    Garante que no ramo de sub-lote parcial (get_many com acerto parcial), linhas que
+    possuem tokens de glossário (TKGLOSS0T) sejam traduzidas e restauradas na legenda,
+    mas NÃO sejam salvas no cache individual de Nível 2.
+    """
+    mocker.patch("tradutor.servico_traducao.GerenciadorGlossario")
+    db_path = str(tmp_path / "cache_tokens_parcial.db")
+    cache_real = CacheTraducoes(db_path=db_path)
+    cache_real.put("Opening line", "auto", "pt", "Linha de abertura")
+
+    mock_engine = MagicMock()
+    mock_engine.translate.return_value = "Eu sou TKGLOSS0T!"
+
+    servico = ServicoTraducao(
+        logger=MagicMock(),
+        progress_callback=MagicMock(),
+        engine=mock_engine,
+        video_filename="Bleach_02.mkv",
+    )
+    servico._cache = cache_real
+
+    def proteger_mock(texto, id_linha=0):
+        if "Ichigo" in texto:
+            return LinhaProtegida(
+                id_linha=id_linha,
+                texto_original=texto,
+                texto_mascarado="I am TKGLOSS0T!",
+                mapa_tokens={"TKGLOSS0T": "Ichigo"},
+            )
+        return LinhaProtegida(id_linha=id_linha, texto_original=texto, texto_mascarado=texto)
+
+    servico._glossary.proteger.side_effect = proteger_mock
+    servico._glossary.restaurar.side_effect = lambda texto, payload: texto.replace("TKGLOSS0T", "Ichigo")
+
+    subs = [EventoLegendaDummy("Opening line"), EventoLegendaDummy("I am Ichigo!")]
+    await _executar_lote(servico, subs)
+
+    assert [s.text for s in subs] == ["Linha de abertura", "Eu sou Ichigo!"]
+    assert cache_real.get("I am TKGLOSS0T!", "auto", "pt") is None
+
+
+@pytest.mark.asyncio
+async def test_regressao_falha_escrita_cache_nao_reverte_traducao_em_portugues(servico_setup):
+    """
+    Se o motor de tradução já traduziu as falas para português, uma falha no SQLite
+    durante cache.put ou cache.put_many jamais deve reverter subs[idx].text para o inglês.
+    """
+    servico, mock_engine, mock_logger, _ = servico_setup
+    servico._cache.put.side_effect = RuntimeError("SQLite disk I/O error on put")
+    servico._cache.put_many.side_effect = RuntimeError("SQLite disk I/O error on put_many")
+
+    # 1) Lote completo com erro de escrita no cache
+    mock_engine.translate.return_value = "Linha 1 PT\nLinha 2 PT"
+    subs_lote = [EventoLegendaDummy("Line 1 EN"), EventoLegendaDummy("Line 2 EN")]
+    await _executar_lote(servico, subs_lote)
+    assert [s.text for s in subs_lote] == ["Linha 1 PT", "Linha 2 PT"]
+
+    # 2) Sub-lote parcial com erro de escrita no cache
+    servico._cache.get_many.return_value = {"Line 1 EN": "Linha 1 PT"}
+    mock_engine.translate.return_value = "Linha 2 PT"
+    subs_parcial = [EventoLegendaDummy("Line 1 EN"), EventoLegendaDummy("Line 2 EN")]
+    await _executar_lote(servico, subs_parcial)
+    assert [s.text for s in subs_parcial] == ["Linha 1 PT", "Linha 2 PT"]
+
+    # 3) Fallback sequencial com erro de escrita no cache
+    servico._cache.get_many.return_value = {}
+    mock_engine.translate.side_effect = ["Dessincronia", "Fallback 1 PT", "Fallback 2 PT"]
+    subs_fb = [EventoLegendaDummy("Line 1 EN"), EventoLegendaDummy("Line 2 EN")]
+    await _executar_lote(servico, subs_fb)
+    assert [s.text for s in subs_fb] == ["Fallback 1 PT", "Fallback 2 PT"]
+
+    logs = [c.args[0] for c in mock_logger.call_args_list]
+    assert not any("[Erro Crítico] Lote ignorado" in msg for msg in logs)
+
 
 

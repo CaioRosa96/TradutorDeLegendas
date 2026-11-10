@@ -16,11 +16,24 @@ def rodar_teste():
     model = OrquestradorTraducoes()
     
     # -- INJEÇÃO E2E (FASE 4) --
-    # Isola a API do Google e a API AniList para não gastar limites e rodar 100% offline
+    # Isola a API do Google, a API AniList e o banco SQLite de cache para não poluir produção
+    import tempfile
     from unittest.mock import patch
+    from tradutor.cache import CacheTraducoes as _CacheReal
+
+    temp_dir_cache = tempfile.TemporaryDirectory()
+    db_e2e_path = os.path.join(temp_dir_cache.name, "cache_e2e_temp.db")
+    patcher_cache = patch(
+        'tradutor.servico_traducao.CacheTraducoes',
+        side_effect=lambda *args, **kwargs: _CacheReal(db_path=db_e2e_path),
+    )
+    patcher_cache.start()
+
     patcher = patch('tradutor.tradutores.google.MotorTraducaoGoogle.translate')
     mock_translate = patcher.start()
-    mock_translate.side_effect = lambda text, src_lang, dest_lang: f"[MOCK] {text}"
+    mock_translate.side_effect = lambda text, src_lang, dest_lang: "\n".join(
+        f"[MOCK] {linha}" for linha in text.split("\n")
+    )
 
     patcher_anilist = patch('alimentar_glossario.auto_alimentar', return_value=None)
     patcher_anilist.start()
@@ -141,7 +154,10 @@ def rodar_teste():
                 os.remove(caminho_gerado)
             except OSError:
                 pass
-        
+
+    patcher_cache.stop()
+    temp_dir_cache.cleanup()
+
     print(f"\n[ANALISE PRONTA] Relatório geral salvo em: {relatorio_path}")
 
 if __name__ == "__main__":
