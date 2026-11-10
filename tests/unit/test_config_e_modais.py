@@ -158,6 +158,56 @@ def test_leitura_glossarios_grimorio():
     assert len(linhas) > 0, "O arquivo de glossario nao deve estar vazio."
 
 
+def test_regressao_grimorio_no_exe_cria_pasta_copia_meipass_e_abre_explorer(tmp_path, mocker):
+    """
+    Reproduz o bug do .exe (--onefile): quando o usuario abre o Grimorio ou clica em
+    'Abrir Pasta no Explorer' em uma pasta onde 'glossarios/' e 'glossario.txt' ainda
+    nao existem no DIRETORIO_EXECUCAO, o sistema deve criar a pasta, copiar os arquivos
+    empacotados em DIRETORIO_RECURSOS (_MEIPASS) e abrir a pasta no Explorer.
+    """
+    from tradutor.ui.modal_grimorio import ModalGrimorio
+
+    dir_exec = tmp_path / "exec_novo"
+    dir_meipass = tmp_path / "meipass_bundle"
+    dir_exec.mkdir()
+    (dir_meipass / "glossarios").mkdir(parents=True)
+
+    (dir_meipass / "glossario.txt").write_text("Sanji\nZoro\n", encoding="utf-8")
+    (dir_meipass / "glossarios" / "Bleach.txt").write_text("Ichigo\nRukia\n", encoding="utf-8")
+    (dir_meipass / "glossarios" / "LEIA_ME.txt").write_text("Instrucoes\n", encoding="utf-8")
+
+    arq_global_exec = str(dir_exec / "glossario.txt")
+    pasta_gloss_exec = str(dir_exec / "glossarios")
+
+    mocker.patch.object(GerenciadorConfig, "DIRETORIO_EXECUCAO", str(dir_exec))
+    mocker.patch.object(GerenciadorConfig, "DIRETORIO_RECURSOS", str(dir_meipass))
+    mocker.patch.object(GerenciadorConfig, "ARQUIVO_GLOSSARIO_PADRAO", arq_global_exec)
+    mocker.patch.object(GerenciadorConfig, "DIRETORIO_GLOSSARIOS", pasta_gloss_exec)
+
+    mock_startfile = mocker.patch("tradutor.ui.modal_grimorio.os.startfile", create=True)
+
+    # Instancia sem criar janela Tk completa para testar a logica do ModalGrimorio isoladamente
+    modal = ModalGrimorio.__new__(ModalGrimorio)
+    modal._glossarios = {}
+    modal._anime_selecionado = None
+    modal._carregar_dados_glossarios()
+
+    assert os.path.isdir(pasta_gloss_exec), "A pasta glossarios/ deveria ter sido criada no DIRETORIO_EXECUCAO!"
+    assert os.path.isfile(arq_global_exec), "O arquivo glossario.txt deveria ter sido copiado para DIRETORIO_EXECUCAO!"
+    assert "Bleach" in modal._glossarios
+    assert modal._glossarios["Bleach"]["termos"] == ["Ichigo", "Rukia"]
+    assert "LEIA_ME" not in modal._glossarios
+
+    # Mesmo se o usuario apagar a pasta manualmente antes de clicar no botao, o botao deve recria-la e abrir
+    import shutil
+    shutil.rmtree(pasta_gloss_exec)
+    assert not os.path.exists(pasta_gloss_exec)
+
+    modal._abrir_pasta_explorer()
+    assert os.path.isdir(pasta_gloss_exec)
+    mock_startfile.assert_called_once_with(pasta_gloss_exec)
+
+
 def test_propagacao_tema_e_idioma_interface(app_interface):
     """Garante que a propagacao de tema e a mudanca de idioma ocorrem sem falhas."""
     app = app_interface

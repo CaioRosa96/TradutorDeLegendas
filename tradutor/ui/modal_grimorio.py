@@ -29,6 +29,7 @@ class ModalGrimorio(ctk.CTkToplevel):
     def _carregar_dados_glossarios(self):
         """Carrega e indexa os arquivos de termos de animes e termos globais."""
         self._glossarios.clear()
+        pasta = GerenciadorConfig.garantir_estrutura_glossarios()
 
         # 1. Glossario Global
         if os.path.exists(GerenciadorConfig.ARQUIVO_GLOSSARIO_PADRAO):
@@ -41,10 +42,9 @@ class ModalGrimorio(ctk.CTkToplevel):
             }
 
         # 2. Glossarios individuais por anime
-        pasta = GerenciadorConfig.DIRETORIO_GLOSSARIOS
         if os.path.exists(pasta):
             for nome in sorted(os.listdir(pasta)):
-                if nome.lower().endswith(".txt"):
+                if nome.lower().endswith(".txt") and nome.lower() != "leia_me.txt":
                     caminho = os.path.join(pasta, nome)
                     nome_anime = os.path.splitext(nome)[0]
                     termos = self._ler_termos_arquivo(caminho)
@@ -227,7 +227,7 @@ class ModalGrimorio(ctk.CTkToplevel):
         self.txt_termos.configure(state="disabled")
 
     def _abrir_pasta_explorer(self):
-        pasta = GerenciadorConfig.DIRETORIO_GLOSSARIOS
+        pasta = GerenciadorConfig.garantir_estrutura_glossarios()
         if os.path.exists(pasta):
             try:
                 os.startfile(pasta)

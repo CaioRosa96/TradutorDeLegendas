@@ -33,6 +33,75 @@ class GerenciadorConfig:
     DIRETORIO_GLOSSARIOS = os.path.join(DIRETORIO_EXECUCAO, "glossarios")
 
     @classmethod
+    def garantir_estrutura_glossarios(cls, filepath_global: str | None = None) -> str:
+        """Garante que a pasta glossarios/ e o arquivo glossario.txt existam no diretório de execução.
+
+        Quando executado via binário PyInstaller (--onefile), sincroniza automaticamente os
+        glossários empacotados em DIRETORIO_RECURSOS (_MEIPASS) para DIRETORIO_EXECUCAO sem
+        sobrescrever arquivos já customizados pelo usuário.
+        """
+        arq_global = filepath_global or cls.ARQUIVO_GLOSSARIO_PADRAO
+        pasta_destino = cls.DIRETORIO_GLOSSARIOS
+
+        try:
+            os.makedirs(pasta_destino, exist_ok=True)
+        except Exception:
+            pass
+
+        # 1. Inicializa ou copia o glossário global
+        if not os.path.isfile(arq_global):
+            origem_recurso_global = os.path.join(cls.DIRETORIO_RECURSOS, "glossario.txt")
+            try:
+                if (
+                    os.path.isfile(origem_recurso_global)
+                    and os.path.abspath(origem_recurso_global) != os.path.abspath(arq_global)
+                ):
+                    shutil.copy2(origem_recurso_global, arq_global)
+                else:
+                    with open(arq_global, "w", encoding="utf-8") as f:
+                        f.write("# Dicionário / Glossário de Proteção\n")
+                        f.write("# Adicione as palavras que você NÃO quer que o Google traduza errado.\n")
+                        f.write("# Formato 1: Palavra Original = Palavra Destino\n")
+                        f.write("# Formato 2: Apenas a Palavra (protege contra qualquer mudança)\n")
+                        f.write("# Exemplos:\n")
+                        f.write("# The Force=A Força\n")
+                        f.write("# Hogwarts\n")
+                        f.write("# Goku\n")
+            except Exception:
+                pass
+
+        # 2. Copia glossários de animes empacotados em _MEIPASS (se ainda não existirem na pasta local)
+        pasta_recurso_gloss = os.path.join(cls.DIRETORIO_RECURSOS, "glossarios")
+        try:
+            if (
+                os.path.isdir(pasta_recurso_gloss)
+                and os.path.abspath(pasta_recurso_gloss) != os.path.abspath(pasta_destino)
+            ):
+                for nome in os.listdir(pasta_recurso_gloss):
+                    if nome.lower().endswith(".txt"):
+                        orig = os.path.join(pasta_recurso_gloss, nome)
+                        dest = os.path.join(pasta_destino, nome)
+                        if os.path.isfile(orig) and not os.path.exists(dest):
+                            shutil.copy2(orig, dest)
+        except Exception:
+            pass
+
+        # 3. Garante arquivo de instruções LEIA_ME.txt na pasta local
+        leia_me = os.path.join(pasta_destino, "LEIA_ME.txt")
+        if not os.path.exists(leia_me):
+            try:
+                with open(leia_me, "w", encoding="utf-8") as f:
+                    f.write("Coloque aqui dicionários específicos de animes (ex: Bleach.txt, One Piece.txt).\n")
+                    f.write(
+                        "Se o nome do vídeo que está sendo traduzido contiver o nome do arquivo, "
+                        "este dicionário será carregado automaticamente junto com o global.\n"
+                    )
+            except Exception:
+                pass
+
+        return pasta_destino
+
+    @classmethod
     def validar_pasta_mkvtoolnix(cls, caminho: str) -> str | None:
         """Verifica se a pasta informada (ou subpasta bin/mkvtoolnix) contém mkvmerge.exe e mkvextract.exe."""
         if not caminho:

@@ -19,6 +19,7 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 - Isolamento *best-effort* de gravação no cache local (`_salvar_cache_seguro` e `_salvar_lote_cache_seguro`), impedindo que falhas de escrita no SQLite revertam legendas já traduzidas em memória.
 - Filtro de proteção contra gravação de linhas contendo tokens sintéticos de glossário (`TKGLOSS{n}T`) no cache individual de Nível 2 durante o fluxo de sub-lote parcial.
 - Isolamento do banco SQLite em diretório temporário durante a execução do teste E2E (`tests/e2e/test_srt_lote.py`), evitando gravação de entradas `[MOCK]` no banco local.
+- Inicialização e sincronização automática da pasta `glossarios/` e `glossario.txt` a partir de `DIRETORIO_RECURSOS` (`_MEIPASS`) em `GerenciadorConfig.garantir_estrutura_glossarios`, corrigindo o botão `Abrir Pasta no Explorer` e a listagem inicial de animes no `ModalGrimorio` quando executado via binário `.exe` (`--onefile`).
 
 ---
 
