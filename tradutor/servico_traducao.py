@@ -64,6 +64,22 @@ class ServicoTraducao:
         """Mapeia os códigos de idioma do MKV para o Google Translate."""
         return Idiomas.para_google(iso_639_2)
 
+    def _salvar_cache_seguro(self, texto: str, src_lang: str, dest_lang: str, traducao: str) -> None:
+        """Persiste uma tradução unitária no cache em modo best-effort sem abortar o lote."""
+        try:
+            self._cache.put(texto, src_lang, dest_lang, traducao)
+        except Exception as e:
+            self._logger(f"[Aviso] Falha ao gravar no cache local (ignorada): {e}")
+
+    def _salvar_lote_cache_seguro(self, itens: dict[str, str], src_lang: str, dest_lang: str) -> None:
+        """Persiste múltiplas traduções no cache em modo best-effort sem reverter legendas."""
+        if not itens or not hasattr(self._cache, "put_many"):
+            return
+        try:
+            self._cache.put_many(itens, src_lang, dest_lang)
+        except Exception as e:
+            self._logger(f"[Aviso] Falha ao gravar lote no cache local (ignorada): {e}")
+
     async def _traduzir_lote(self, executor, semaforo, lote_indices, subs, pbar_lock, src_lang="auto", dest_lang="pt"):
         """Traduz um lote de linhas de legenda de forma assíncrona."""
         if self._is_cancelled():
@@ -133,11 +149,12 @@ class ServicoTraducao:
                             if len(sub_linhas) == len(pendentes):
                                 novos_lote = {}
                                 for (idx, p_linha), linha_bruta in zip(pendentes, sub_linhas):
-                                    novos_lote[p_linha.texto_mascarado] = linha_bruta.strip()
                                     r_rest = self._glossary.restaurar(linha_bruta, p_linha)
-                                    subs[idx].text = self._limpar_quebras(r_rest.strip())
-                                if novos_lote and hasattr(self._cache, "put_many"):
-                                    self._cache.put_many(novos_lote, src_lang, dest_lang)
+                                    f_limpa = self._limpar_quebras(r_rest.strip())
+                                    subs[idx].text = f_limpa
+                                    if not p_linha.possui_tokens and p_linha.texto_mascarado:
+                                        novos_lote[p_linha.texto_mascarado] = f_limpa
+                                self._salvar_lote_cache_seguro(novos_lote, src_lang, dest_lang)
                                 with pbar_lock:
                                     self._linhas_processadas += len(lote_indices)
                                     self._progress_callback(self._linhas_processadas, self._total_linhas)
@@ -145,8 +162,8 @@ class ServicoTraducao:
 
                     # 2. Se não existir, vai na Rede via Engine injetada
                     traduzido = await loop.run_in_executor(executor, self._engine.translate, bloco_protegido, src_lang, dest_lang)
-                    # 3. Salva no Cache
-                    self._cache.put(bloco_protegido, src_lang, dest_lang, traduzido)
+                    # 3. Salva no Cache (best-effort)
+                    self._salvar_cache_seguro(bloco_protegido, src_lang, dest_lang, traduzido)
                     
                 traduzido_restaurado = self._glossary.restaurar(traduzido, payload_bloco)
                 
@@ -159,14 +176,13 @@ class ServicoTraducao:
                 if len(frases_limpas) == len(lote_indices):
                     for i, idx in enumerate(lote_indices):
                         subs[idx].text = frases_limpas[i]
-                    if payloads_linhas and hasattr(self._cache, "put_many"):
+                    if payloads_linhas:
                         novos_individuais = {
                             p_linha.texto_mascarado: frase_limpa
                             for p_linha, frase_limpa in zip(payloads_linhas, frases_limpas)
                             if not p_linha.possui_tokens and p_linha.texto_mascarado
                         }
-                        if novos_individuais:
-                            self._cache.put_many(novos_individuais, src_lang, dest_lang)
+                        self._salvar_lote_cache_seguro(novos_individuais, src_lang, dest_lang)
                 else:
                     self._logger("[Aviso] Dessincronia no lote. Executando fallback sequencial...")
                     for pos, (idx, texto) in enumerate(zip(lote_indices, textos_preparados)):
@@ -184,7 +200,6 @@ class ServicoTraducao:
                                 r = await loop.run_in_executor(
                                     executor, self._engine.translate, texto_protegido, src_lang, dest_lang
                                 )
-                                self._cache.put(texto_protegido, src_lang, dest_lang, r)
                             except ExcecaoDisjuntorAberto:
                                 for rem_idx, rem_texto in zip(lote_indices[pos:], textos_preparados[pos:]):
                                     subs[rem_idx].text = self._limpar_quebras(rem_texto)
@@ -192,6 +207,7 @@ class ServicoTraducao:
                             except Exception:
                                 subs[idx].text = self._limpar_quebras(texto)
                                 continue
+                            self._salvar_cache_seguro(texto_protegido, src_lang, dest_lang, r)
 
                         r_restaurado = self._glossary.restaurar(r, payload_linha)
                         subs[idx].text = self._limpar_quebras(r_restaurado)

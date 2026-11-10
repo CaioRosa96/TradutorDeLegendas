@@ -107,19 +107,30 @@ class CacheTraducoes:
         """Fachada de busca em lote."""
         return self.get_many(textos, src_lang, dest_lang)
 
-    def put_many(self, itens: Sequence[tuple[str, str, str, str]]) -> None:
+    def put_many(
+        self,
+        itens: Mapping[str, str] | Sequence[tuple[str, str, str, str]],
+        src_lang: str = "auto",
+        dest_lang: str = "pt",
+    ) -> None:
         """Salva múltiplas traduções em lote usando executemany sob RLock em uma única transação.
 
-        Cada item deve ser uma tupla: (texto, src_lang, dest_lang, texto_traduzido).
+        Aceita tanto um dicionário `{texto_original: texto_traduzido}` (usando `src_lang` e
+        `dest_lang` informados) quanto uma sequência de tuplas `(texto, src_lang, dest_lang, texto_traduzido)`.
         """
         if not itens:
             return
 
+        if isinstance(itens, Mapping):
+            iteravel = ((txt, src_lang, dest_lang, trad) for txt, trad in itens.items())
+        else:
+            iteravel = itens
+
         dados = []
-        for texto, src_lang, dest_lang, texto_traduzido in itens:
+        for texto, item_src, item_dest, texto_traduzido in iteravel:
             if texto_traduzido is not None:
-                h = self._gerar_hash(texto, src_lang, dest_lang)
-                dados.append((h, src_lang, dest_lang, texto_traduzido))
+                h = self._gerar_hash(texto, item_src, item_dest)
+                dados.append((h, item_src, item_dest, texto_traduzido))
 
         if not dados:
             return
@@ -138,11 +149,7 @@ class CacheTraducoes:
         dest_lang: str = "pt",
     ) -> None:
         """Fachada para gravação em lote. Aceita dict {texto: traducao} ou lista de tuplas."""
-        if isinstance(itens, Mapping):
-            tuplas = [(txt, src_lang, dest_lang, trad) for txt, trad in itens.items()]
-        else:
-            tuplas = list(itens)
-        self.put_many(tuplas)
+        self.put_many(itens, src_lang, dest_lang)
 
     def contar_traducoes(self) -> int:
         """Retorna o número total de traduções armazenadas no cache."""

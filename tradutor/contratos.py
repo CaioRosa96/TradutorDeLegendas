@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Mapping, Protocol, Sequence, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,4 +58,9 @@ class CacheTraducaoPort(Protocol):
 
     def get_many(self, textos: Sequence[str], src_lang: str, dest_lang: str) -> dict[str, str]: ...
 
-    def put_many(self, itens: Sequence[tuple[str, str, str, str]]) -> None: ...
+    def put_many(
+        self,
+        itens: Mapping[str, str] | Sequence[tuple[str, str, str, str]],
+        src_lang: str = "auto",
+        dest_lang: str = "pt",
+    ) -> None: ...
