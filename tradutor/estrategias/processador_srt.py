@@ -1,5 +1,6 @@
 import os
 from .processador_base import ProcessadorArquivoBase
+from ..idiomas import Idiomas
 
 class ProcessadorSrt(ProcessadorArquivoBase):
     """Estratégia específica para legendas avulsas (SRT, ASS)."""
@@ -16,13 +17,15 @@ class ProcessadorSrt(ProcessadorArquivoBase):
         pass # Não há arquivos "_ORIGINAL" para SRT avulso
 
     def get_output_paths(self, origem, idioma_destino, arq_trabalho) -> dict:
-        destino_dir = os.path.dirname(origem)
+        destino_dir = self.output_dir or os.path.dirname(origem)
+        os.makedirs(destino_dir, exist_ok=True)
         nome_base = os.path.basename(origem)
         extensao = nome_base.rsplit('.', 1)[-1]
         nome_sem_ext = nome_base.rsplit('.', 1)[0]
+        sufixo = (Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino) or "pt").upper()
         
         return {
-            'legenda': os.path.join(destino_dir, f"{nome_sem_ext}_{idioma_destino.upper()}.{extensao}"),
+            'legenda': os.path.join(destino_dir, f"{nome_sem_ext}_{sufixo}.{extensao}"),
             'video': None
         }
 

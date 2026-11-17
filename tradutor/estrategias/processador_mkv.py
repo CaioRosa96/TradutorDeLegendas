@@ -5,6 +5,7 @@ from .processador_base import ProcessadorArquivoBase
 from ..manipulador_mkv import ManipuladorMkv
 from ..config import GerenciadorConfig
 from ..config_usuario import PreferenciasUsuario
+from ..idiomas import Idiomas
 from ..transcritores import MotorWhisperfile
 
 
@@ -27,7 +28,8 @@ class ProcessadorMkv(ProcessadorArquivoBase):
                 self.log("[AVISO] Processamento abortado. MKVToolNix não encontrado.")
                 return None, None
 
-        destino_dir = os.path.dirname(origem)
+        destino_dir = self.output_dir or os.path.dirname(origem)
+        os.makedirs(destino_dir, exist_ok=True)
         forcar_whisper = bool(PreferenciasUsuario.obter("forcar_transcricao", False))
 
         if not forcar_whisper:
@@ -103,26 +105,28 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         return politica if politica in ("converter_mkv", "manter_original") else "converter_mkv"
 
     def get_output_paths(self, origem, idioma_destino, arq_trabalho) -> dict:
-        destino_dir = os.path.dirname(origem)
+        destino_dir = self.output_dir or os.path.dirname(origem)
+        os.makedirs(destino_dir, exist_ok=True)
         nome_base = os.path.basename(arq_trabalho)
         extensao = nome_base.rsplit('.', 1)[-1]
         nome_sem_ext = nome_base.rsplit('.', 1)[0].replace("_ORIGINAL", "")
         ext_video = os.path.splitext(origem)[1].lower() or ".mkv"
+        sufixo = (Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino) or "pt").upper()
 
         politica_saida = self._resolver_politica_saida_video(origem)
         if politica_saida == "manter_original" and ext_video != ".mkv":
             if ext_video in (".mp4", ".webm"):
                 extensao = "srt"
-                caminho_video = os.path.join(destino_dir, f"{nome_sem_ext}_{idioma_destino.upper()}{ext_video}")
+                caminho_video = os.path.join(destino_dir, f"{nome_sem_ext}_{sufixo}{ext_video}")
             else:
                 # Para .avi e .wmv no modo manter_original, preserva-se apenas a legenda .srt externa
                 extensao = "srt"
                 caminho_video = None
         else:
-            caminho_video = os.path.join(destino_dir, f"{nome_sem_ext}_{idioma_destino.upper()}.mkv")
+            caminho_video = os.path.join(destino_dir, f"{nome_sem_ext}_{sufixo}.mkv")
 
         return {
-            'legenda': os.path.join(destino_dir, f"{nome_sem_ext}_{idioma_destino.upper()}.{extensao}"),
+            'legenda': os.path.join(destino_dir, f"{nome_sem_ext}_{sufixo}.{extensao}"),
             'video': caminho_video,
         }
 

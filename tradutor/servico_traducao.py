@@ -51,6 +51,9 @@ class ServicoTraducao:
         if engine is None:
             raise ValueError("Um motor de tradução (ITradutor) deve ser fornecido.")
         self._engine = engine
+        self._linhas_traduzidas_sucesso = 0
+        self._disjuntor_disparado = False
+        self._lock_stats = threading.Lock()
 
     @staticmethod
     def _limpar_quebras(texto):
@@ -123,6 +126,8 @@ class ServicoTraducao:
                             r_cached = cache_parcial[p_linha.texto_mascarado]
                             r_rest = self._glossary.restaurar(r_cached, p_linha)
                             subs[idx].text = self._limpar_quebras(r_rest.strip())
+                        with self._lock_stats:
+                            self._linhas_traduzidas_sucesso += len(lote_indices)
                         with pbar_lock:
                             self._linhas_processadas += len(lote_indices)
                             self._progress_callback(self._linhas_processadas, self._total_linhas)
@@ -155,6 +160,8 @@ class ServicoTraducao:
                                     if not p_linha.possui_tokens and p_linha.texto_mascarado:
                                         novos_lote[p_linha.texto_mascarado] = f_limpa
                                 self._salvar_lote_cache_seguro(novos_lote, src_lang, dest_lang)
+                                with self._lock_stats:
+                                    self._linhas_traduzidas_sucesso += len(lote_indices)
                                 with pbar_lock:
                                     self._linhas_processadas += len(lote_indices)
                                     self._progress_callback(self._linhas_processadas, self._total_linhas)
@@ -176,6 +183,8 @@ class ServicoTraducao:
                 if len(frases_limpas) == len(lote_indices):
                     for i, idx in enumerate(lote_indices):
                         subs[idx].text = frases_limpas[i]
+                    with self._lock_stats:
+                        self._linhas_traduzidas_sucesso += len(lote_indices)
                     if payloads_linhas:
                         novos_individuais = {
                             p_linha.texto_mascarado: frase_limpa
@@ -201,6 +210,8 @@ class ServicoTraducao:
                                     executor, self._engine.translate, texto_protegido, src_lang, dest_lang
                                 )
                             except ExcecaoDisjuntorAberto:
+                                with self._lock_stats:
+                                    self._disjuntor_disparado = True
                                 for rem_idx, rem_texto in zip(lote_indices[pos:], textos_preparados[pos:]):
                                     subs[rem_idx].text = self._limpar_quebras(rem_texto)
                                 break
@@ -211,6 +222,8 @@ class ServicoTraducao:
 
                         r_restaurado = self._glossary.restaurar(r, payload_linha)
                         subs[idx].text = self._limpar_quebras(r_restaurado)
+                        with self._lock_stats:
+                            self._linhas_traduzidas_sucesso += 1
                         if self._is_cancelled():
                             for rem_idx, rem_texto in zip(lote_indices[pos + 1:], textos_preparados[pos + 1:]):
                                 subs[rem_idx].text = self._limpar_quebras(rem_texto)
@@ -218,6 +231,9 @@ class ServicoTraducao:
                         pausa = getattr(GerenciadorConfig, "PAUSA_FALLBACK_SEGUNDOS", 0.5)
                         await asyncio.sleep(pausa)
             except Exception as e:
+                if isinstance(e, ExcecaoDisjuntorAberto) or "circuit breaker" in str(e).lower() or "disjuntor" in str(e).lower():
+                    with self._lock_stats:
+                        self._disjuntor_disparado = True
                 self._logger(f"[Erro Crítico] Lote ignorado. Motivo: {e}")
                 for i, idx in enumerate(lote_indices):
                     subs[idx].text = self._limpar_quebras(textos_preparados[i])
@@ -226,15 +242,25 @@ class ServicoTraducao:
             self._linhas_processadas += len(lote_indices)
             self._progress_callback(self._linhas_processadas, self._total_linhas)
 
-    async def pipeline(self, origem, destino, idioma_preferido="auto", idioma_destino="pt"):
+    async def pipeline(self, origem, destino, idioma_preferido="auto", idioma_destino="pt", idioma_origem=None) -> bool:
         """Pipeline completo: carrega legenda, traduz todos os lotes e salva.
 
         Args:
             origem: Caminho do arquivo de legenda original.
             destino: Caminho do arquivo de legenda traduzida.
             idioma_preferido: Idioma de origem (ex: 'eng', 'fra').
+            idioma_destino: Idioma de destino (ex: 'pt', 'en').
+            idioma_origem: Alias opcional para idioma_preferido.
+
+        Returns:
+            bool: True se o arquivo foi traduzido e salvo com sucesso; False caso contrário.
         """
-        src_lang = self._map_lang(idioma_preferido)
+        dest_norm = Idiomas.normalizar_destino(idioma_destino)
+        if not dest_norm:
+            raise ValueError(f"Idioma de destino invalido ou nao suportado: '{idioma_destino}'")
+
+        src_efetivo = idioma_origem or idioma_preferido or "auto"
+        src_lang = self._map_lang(src_efetivo)
         
         self._logger(f"Carregando legendas de {os.path.basename(origem)}...")
         try:
@@ -246,6 +272,9 @@ class ServicoTraducao:
         indices_map = [i for i, event in enumerate(subs) if event.text.strip()]
         self._total_linhas = len(indices_map)
         self._linhas_processadas = 0
+        with self._lock_stats:
+            self._linhas_traduzidas_sucesso = 0
+            self._disjuntor_disparado = False
 
         self._logger(f"Total de diálogos encontrados: {self._total_linhas}")
         self._progress_callback(0, self._total_linhas)
@@ -258,12 +287,21 @@ class ServicoTraducao:
         pbar_lock = threading.Lock()
 
         with ThreadPoolExecutor(max_workers=GerenciadorConfig.MAX_CONCORRENTE) as executor:
-            tasks = [self._traduzir_lote(executor, semaforo, lote, subs, pbar_lock, src_lang, idioma_destino) for lote in lotes]
+            tasks = [self._traduzir_lote(executor, semaforo, lote, subs, pbar_lock, src_lang, dest_norm) for lote in lotes]
             await asyncio.gather(*tasks)
 
         if self._is_cancelled():
             self._logger("[AVISO] Tradução abortada pelo usuário.")
-            return
+            return False
+
+        if self._disjuntor_disparado:
+            self._logger("[ERRO CRÍTICO] Tradução interrompida: Circuit Breaker disparado.")
+            raise ExcecaoDisjuntorAberto("Circuit Breaker ABERTO: Abortando para evitar banimentos.")
+
+        if self._total_linhas > 0 and self._linhas_traduzidas_sucesso == 0:
+            self._logger("[ERRO CRÍTICO] Falha total: nenhuma linha pôde ser traduzida com sucesso.")
+            raise RuntimeError("Falha total na tradução: nenhuma linha foi traduzida.")
 
         self._logger("Salvando arquivo de legendas traduzido...")
         subs.save(destino)
+        return True

@@ -188,3 +188,24 @@ def test_orquestrador_compartilha_mesmo_motor_entre_arquivos_da_fila(mocker, tmp
     assert len(motores_injetados) == 2
     assert motores_injetados[0] is not None
     assert motores_injetados[0] is motores_injetados[1]
+
+
+def test_motor_sanitiza_idioma_destino(translator_falso, logger_falso):
+    """Garante que o motor converte 'pt-br' para 'pt' e rejeita destinos inválidos."""
+    motor = MotorTraducaoGoogle()
+    translator_falso.translate.return_value = SimpleNamespace(text="Olá mundo")
+
+    # pt-br deve ser normalizado para pt
+    res = motor.translate("Hello world", src_lang="en", dest_lang="pt-br")
+    assert res == "Olá mundo"
+    assert translator_falso.translate.call_args.kwargs["dest"] == "pt"
+
+    # auto ou vazio como destino deve falhar imediatamente sem chamar googletrans
+    translator_falso.translate.reset_mock()
+    with pytest.raises(ValueError, match="Idioma de destino invalido"):
+        motor.translate("Hello", src_lang="en", dest_lang="auto")
+    assert translator_falso.translate.call_count == 0
+
+    with pytest.raises(ValueError, match="Idioma de destino invalido"):
+        motor.translate("Hello", src_lang="en", dest_lang="invalido_xyz")
+    assert translator_falso.translate.call_count == 0

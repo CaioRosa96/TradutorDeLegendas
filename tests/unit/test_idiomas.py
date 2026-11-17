@@ -19,12 +19,41 @@ def test_para_google(entrada, esperado):
 
 @pytest.mark.parametrize("entrada, esperado", [
     ("pt", ("por", "Português (Brasil)")),
+    ("pt-br", ("por", "Português (Brasil)")),
+    ("por", ("por", "Português (Brasil)")),
     ("ja", ("jpn", "日本語")),
+    ("jpn", ("jpn", "日本語")),
     ("en", ("eng", "English")),
+    ("eng", ("eng", "English")),
     ("xyz", ("xyz", "XYZ"))  # Destino desconhecido
 ])
 def test_destino_para_mkv(entrada, esperado):
     assert Idiomas.destino_para_mkv(entrada) == esperado
+
+
+@pytest.mark.parametrize("entrada, esperado", [
+    ("pt", "pt"),
+    ("pt-br", "pt"),
+    ("pt_br", "pt"),
+    ("por", "pt"),
+    ("Português (pt)", "pt"),
+    ("en", "en"),
+    ("eng", "en"),
+    ("en-us", "en"),
+    ("Inglês (ing)", "en"),
+    ("es", "es"),
+    ("spa", "es"),
+    ("zh-cn", "zh-cn"),
+    ("chi", "zh-cn"),
+    ("auto", None),
+    ("und", None),
+    ("invalido", None),
+    ("", None),
+    (None, None),
+])
+def test_normalizar_destino(entrada, esperado):
+    assert Idiomas.normalizar_destino(entrada) == esperado
+    assert Idiomas.eh_destino_suportado(entrada) == (esperado is not None)
 
 
 def test_nomes_amigaveis_e_codigos():

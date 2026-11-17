@@ -2,8 +2,14 @@ import os
 import sys
 import json
 import time
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+os.environ.setdefault(
+    "TRADUTOR_LOG_DIR",
+    os.path.join(tempfile.gettempdir(), "TradutorLegendas26_e2e_logs"),
+)
 
 from tradutor.orquestrador import OrquestradorTraducoes
 import pysubs2
@@ -17,7 +23,6 @@ def rodar_teste():
     
     # -- INJEÇÃO E2E (FASE 4) --
     # Isola a API do Google, a API AniList e o banco SQLite de cache para não poluir produção
-    import tempfile
     from unittest.mock import patch
     from tradutor.cache import CacheTraducoes as _CacheReal
 

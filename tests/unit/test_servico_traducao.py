@@ -545,4 +545,66 @@ async def test_regressao_falha_escrita_cache_nao_reverte_traducao_em_portugues(s
     assert not any("[Erro Crítico] Lote ignorado" in msg for msg in logs)
 
 
+@pytest.mark.asyncio
+async def test_pipeline_rejeita_idioma_destino_invalido(servico_setup, tmp_path):
+    servico, _, _, _ = servico_setup
+    arq_fake = str(tmp_path / "sub.srt")
+    with open(arq_fake, "w", encoding="utf-8") as f:
+        f.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n")
+
+    with pytest.raises(ValueError, match="Idioma de destino invalido"):
+        await servico.pipeline(arq_fake, str(tmp_path / "out.srt"), idioma_origem="en", idioma_destino="auto")
+
+    with pytest.raises(ValueError, match="Idioma de destino invalido"):
+        await servico.pipeline(arq_fake, str(tmp_path / "out.srt"), idioma_origem="en", idioma_destino="xyz_invalido")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_falha_total_nao_salva_arquivo(servico_setup, tmp_path):
+    servico, mock_engine, mock_logger, _ = servico_setup
+    arq_fake = str(tmp_path / "sub.srt")
+    out_fake = str(tmp_path / "out.srt")
+    with open(arq_fake, "w", encoding="utf-8") as f:
+        f.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n2\n00:00:03,000 --> 00:00:04,000\nWorld\n\n")
+
+    # Força todos os lotes a falharem com erro de API
+    mock_engine.translate.side_effect = Exception("Erro permanente na API")
+
+    with pytest.raises(RuntimeError, match="Falha total na tradução"):
+        await servico.pipeline(arq_fake, out_fake, idioma_origem="en", idioma_destino="pt")
+
+    assert not os.path.exists(out_fake), "Arquivo traduzido não deve ser salvo quando todas as falas falham!"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_disjuntor_aberto_aborta_sem_salvar(servico_setup, tmp_path):
+    servico, mock_engine, mock_logger, _ = servico_setup
+    arq_fake = str(tmp_path / "sub.srt")
+    out_fake = str(tmp_path / "out.srt")
+    with open(arq_fake, "w", encoding="utf-8") as f:
+        f.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n")
+
+    mock_engine.translate.side_effect = ExcecaoDisjuntorAberto("Circuit Breaker ABERTO")
+
+    with pytest.raises(ExcecaoDisjuntorAberto, match="Circuit Breaker ABERTO"):
+        await servico.pipeline(arq_fake, out_fake, idioma_origem="en", idioma_destino="pt")
+
+    assert not os.path.exists(out_fake), "Arquivo traduzido não deve ser salvo quando o Circuit Breaker abre!"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_sucesso_salva_arquivo_e_retorna_true(servico_setup, tmp_path):
+    servico, mock_engine, _, _ = servico_setup
+    arq_fake = str(tmp_path / "sub.srt")
+    out_fake = str(tmp_path / "out.srt")
+    with open(arq_fake, "w", encoding="utf-8") as f:
+        f.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n")
+
+    mock_engine.translate.return_value = "Olá"
+
+    res = await servico.pipeline(arq_fake, out_fake, idioma_origem="en", idioma_destino="pt-br")
+    assert res is True
+    assert os.path.exists(out_fake)
+
+
 

@@ -26,6 +26,7 @@ class ProcessadorArquivoBase(ABC):
         ask_whisper_cb=None,
         ask_output_format_cb=None,
         ask_dependencies_cb=None,
+        output_dir=None,
     ):
         self.log = log_cb
         self.update_progress = progress_cb
@@ -35,9 +36,17 @@ class ProcessadorArquivoBase(ABC):
         self.ask_whisper = ask_whisper_cb
         self.ask_output_format = ask_output_format_cb
         self.ask_dependencies = ask_dependencies_cb
+        self.output_dir = output_dir
 
     def process(self, origem, idioma_origem, idioma_destino, manter_legenda) -> bool:
         """Executa o pipeline padrão para um arquivo."""
+
+        # 0. Normalização do Idioma de Destino
+        dest_norm = Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino)
+        if not dest_norm or dest_norm == "auto":
+            self.log(f"[ERRO CRÍTICO] Idioma de destino inválido ou não suportado: '{idioma_destino}'.")
+            return False
+        idioma_destino = dest_norm
 
         # 1. Preparação Específica (Extração MKV, Transcrição IA ou Bypass SRT)
         arq_trabalho, idioma_real = self.prepare(origem, idioma_origem)
@@ -83,7 +92,13 @@ class ProcessadorArquivoBase(ABC):
                     engine=engine,
                     video_filename=os.path.basename(origem),
                 )
-                asyncio.run(translator_svc.pipeline(arq_trabalho, caminho_legenda_final, idioma_real, idioma_destino))
+                sucesso_trad = asyncio.run(
+                    translator_svc.pipeline(arq_trabalho, caminho_legenda_final, idioma_real, idioma_destino)
+                )
+                if not sucesso_trad or not os.path.isfile(caminho_legenda_final):
+                    self.log("[ERRO CRÍTICO] Tradução falhou ou arquivo final ausente. Abortando multiplexação.")
+                    self.cleanup_temporary(arq_trabalho)
+                    return False
 
             if not self.is_running():
                 return False

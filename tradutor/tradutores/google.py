@@ -2,6 +2,7 @@ import threading
 import time
 from googletrans import Translator
 from .base import ITradutor, ExcecaoDisjuntorAberto
+from ..idiomas import Idiomas
 from ..logger import app_logger
 
 class MotorTraducaoGoogle(ITradutor):
@@ -72,6 +73,12 @@ class MotorTraducaoGoogle(ITradutor):
 
     def translate(self, text: str, src_lang: str, dest_lang: str) -> str:
         self._check_circuit()
+
+        # Sanitizacao defensiva do idioma de destino
+        dest_efetivo = Idiomas.normalizar_destino(dest_lang) or Idiomas.para_google(dest_lang)
+        if not dest_efetivo or dest_efetivo == "auto":
+            raise ValueError(f"Idioma de destino invalido para o Google Translate: '{dest_lang}'")
+        dest_lang = dest_efetivo
         
         for tentativa in range(self._max_retries):
             try:

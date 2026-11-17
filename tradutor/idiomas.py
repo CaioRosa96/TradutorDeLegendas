@@ -34,26 +34,78 @@ class Idiomas:
         "zh-cn": ("chi", "中文 (简体)"),
     }
 
-    @staticmethod
-    def para_google(codigo):
-        """Converte um código de idioma (MKV ou Google) para o código do Google Translate.
+    DESTINOS_SUPORTADOS: tuple[str, ...] = (
+        "pt", "en", "es", "fr", "de", "it", "ru", "ja", "ko", "zh-cn"
+    )
+
+    _VARIANTES_REGIONAIS = {
+        "pt-br": "pt", "pt_br": "pt", "por": "pt",
+        "en-us": "en", "en_us": "en", "en-gb": "en", "en_gb": "en", "eng": "en",
+        "es-es": "es", "es_es": "es", "es-419": "es", "es_419": "es", "spa": "es",
+        "fr-fr": "fr", "fr_fr": "fr", "fra": "fr", "fre": "fr",
+        "de-de": "de", "de_de": "de", "ger": "de", "deu": "de",
+        "it-it": "it", "it_it": "it", "ita": "it",
+        "ru-ru": "ru", "ru_ru": "ru", "rus": "ru",
+        "ja-jp": "ja", "ja_jp": "ja", "jpn": "ja",
+        "ko-kr": "ko", "ko_kr": "ko", "kor": "ko",
+        "zh": "zh-cn", "zh-cn": "zh-cn", "zh_cn": "zh-cn", "zh-hans": "zh-cn", "chi": "zh-cn", "zho": "zh-cn",
+    }
+
+    @classmethod
+    def para_google(cls, codigo):
+        """Converte um código de idioma (MKV, regional ou Google) para o código do Google Translate.
 
         Retorna 'auto' quando o idioma é desconhecido ou não mapeado.
         """
         if not codigo:
             return "auto"
-        codigo = codigo.strip().lower()
-        if codigo in Idiomas._INDEFINIDOS:
+        codigo = str(codigo).strip().lower()
+        if codigo in cls._INDEFINIDOS:
             return "auto"
-        if codigo in Idiomas._MKV_PARA_GOOGLE.values():
+        if codigo in cls._VARIANTES_REGIONAIS:
+            return cls._VARIANTES_REGIONAIS[codigo]
+        if codigo in cls._MKV_PARA_GOOGLE.values():
             return codigo
-        return Idiomas._MKV_PARA_GOOGLE.get(codigo, "auto")
+        return cls._MKV_PARA_GOOGLE.get(codigo, "auto")
 
-    @staticmethod
-    def destino_para_mkv(codigo_google):
+    @classmethod
+    def normalizar_destino(cls, codigo: str | None) -> str | None:
+        """Normaliza qualquer representação de idioma para um código técnico de destino Google suportado.
+
+        Retorna None se o código não puder ser mapeado para um destino válido.
+        """
+        if not codigo:
+            return None
+        cod_limpo = str(codigo).strip().lower()
+        if not cod_limpo or cod_limpo in cls._INDEFINIDOS:
+            return None
+
+        # 1. Verifica se já é um código direto de destino suportado
+        if cod_limpo in cls.DESTINOS_SUPORTADOS:
+            return cod_limpo
+
+        # 2. Tenta converter rótulos amigáveis da UI (ex: "Português (pt)" -> "pt")
+        cod_ui = cls.nome_para_codigo_destino(cod_limpo)
+        if cod_ui in cls.DESTINOS_SUPORTADOS:
+            return cod_ui
+
+        # 3. Mapeia variantes regionais ou códigos MKV
+        cod_google = cls.para_google(cod_limpo)
+        if cod_google in cls.DESTINOS_SUPORTADOS:
+            return cod_google
+
+        return None
+
+    @classmethod
+    def eh_destino_suportado(cls, codigo: str | None) -> bool:
+        """Retorna True se o código representar um idioma de destino suportado."""
+        return cls.normalizar_destino(codigo) is not None
+
+    @classmethod
+    def destino_para_mkv(cls, codigo_google: str | None) -> tuple[str, str]:
         """Retorna (código ISO-639-2, nome da trilha) para embutir a legenda no MKV."""
-        codigo = (codigo_google or "").strip().lower()
-        return Idiomas._DESTINO_PARA_MKV.get(codigo, (codigo or "und", codigo.upper() or "Legenda"))
+        cod_norm = cls.normalizar_destino(codigo_google) or (str(codigo_google).strip().lower() if codigo_google else "")
+        return cls._DESTINO_PARA_MKV.get(cod_norm, (cod_norm or "und", cod_norm.upper() or "Legenda"))
 
     _NOMES_DESTINO_MULTI = {
         "pt-br": {
