@@ -8,7 +8,19 @@ import subprocess
 from dataclasses import dataclass
 
 from ..config import GerenciadorConfig
-from ..manipulador_mkv import ManipuladorMkv
+
+
+@dataclass(frozen=True, slots=True)
+class PerfilHardwareMidia:
+    """Perfil consolidado de hardware e características acústicas para tomada de decisão."""
+
+    duracao_segundos: float = 0.0
+    idioma_audio: str = "und"
+    canais_audio: int = 2
+    possui_fundo_musical: bool = False
+    proporcao_silencio: float = 0.0
+    ram_livre_gb: float = 8.0
+    nucleos_cpu: int = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +120,7 @@ class RecomendadorModeloWhisper:
     @staticmethod
     def analisar_acustica_ffmpeg(caminho_arquivo: str, duracao_segundos: float) -> tuple[bool, float]:
         """Amostra até 30s do áudio via filtro silencedetect do FFmpeg para detectar música/efeitos contínuos."""
-        ffmpeg_bin = ManipuladorMkv._localizar_ffmpeg()
+        ffmpeg_bin = GerenciadorConfig.get_ffmpeg_path()
         if not ffmpeg_bin or not caminho_arquivo or not os.path.isfile(caminho_arquivo):
             return True, 0.10
 
@@ -154,20 +166,68 @@ class RecomendadorModeloWhisper:
             return True, 0.10
 
     @classmethod
+    def decidir_modelo_perfil(cls, perfil: PerfilHardwareMidia) -> tuple[str, str | None, str]:
+        """Árvore de decisão determinística para escolha do modelo Whisperfile ideal."""
+        if perfil.ram_livre_gb < 2.2:
+            return "tiny", "small", "diag_motivo_ram_baixa"
+
+        idioma_complexo = perfil.idioma_audio.lower() in cls.IDIOMAS_COMPLEXOS
+        video_longo = perfil.duracao_segundos >= 900.0
+        video_curto = 0.0 < perfil.duracao_segundos <= 180.0
+
+        if not perfil.possui_fundo_musical and not idioma_complexo and video_longo and perfil.canais_audio <= 2:
+            return "tiny", "small", "diag_motivo_voz_limpa_longo"
+
+        if (perfil.canais_audio >= 6 or perfil.proporcao_silencio < 0.04) and video_curto and perfil.ram_livre_gb >= 6.0:
+            return "medium", "small", "diag_motivo_fundo_denso_curto"
+
+        if perfil.possui_fundo_musical or idioma_complexo or perfil.canais_audio > 2:
+            alternativa = "medium" if perfil.ram_livre_gb >= 4.0 else "tiny"
+            return "small", alternativa, "diag_motivo_musica_ou_und"
+
+        return "small", "tiny", "diag_motivo_equilibrio_padrao"
+
+    @classmethod
+    def _decidir_modelo(
+        cls,
+        duracao_segundos: float = 0.0,
+        idioma_audio: str = "und",
+        canais_audio: int = 2,
+        possui_fundo_musical: bool = False,
+        proporcao_silencio: float = 0.0,
+        ram_livre_gb: float = 8.0,
+        perfil: PerfilHardwareMidia | None = None,
+    ) -> tuple[str, str | None, str]:
+        """Fachada retrocompatível que delega para decidir_modelo_perfil."""
+        if perfil is None:
+            perfil = PerfilHardwareMidia(
+                duracao_segundos=duracao_segundos,
+                idioma_audio=idioma_audio,
+                canais_audio=canais_audio,
+                possui_fundo_musical=possui_fundo_musical,
+                proporcao_silencio=proporcao_silencio,
+                ram_livre_gb=ram_livre_gb,
+            )
+        return cls.decidir_modelo_perfil(perfil)
+
+    @classmethod
     def analisar_arquivo(cls, caminho_arquivo: str) -> DiagnosticoAudioWhisper:
         """Executa o diagnóstico completo do arquivo de mídia e retorna a recomendação fundamentada."""
         ram_livre_gb, nucleos_cpu = cls.obter_recursos_sistema()
         duracao_s, idioma, canais = cls.inspecionar_metadados_mkv(caminho_arquivo)
         possui_fundo, prop_silencio = cls.analisar_acustica_ffmpeg(caminho_arquivo, duracao_s)
 
-        modelo_rec, modelo_alt, chave_motivo = cls._decidir_modelo(
+        perfil = PerfilHardwareMidia(
             duracao_segundos=duracao_s,
             idioma_audio=idioma,
             canais_audio=canais,
             possui_fundo_musical=possui_fundo,
             proporcao_silencio=prop_silencio,
             ram_livre_gb=ram_livre_gb,
+            nucleos_cpu=nucleos_cpu,
         )
+
+        modelo_rec, modelo_alt, chave_motivo = cls.decidir_modelo_perfil(perfil)
 
         return DiagnosticoAudioWhisper(
             modelo_recomendado=modelo_rec,
@@ -181,34 +241,3 @@ class RecomendadorModeloWhisper:
             nucleos_cpu=nucleos_cpu,
             chave_motivo=chave_motivo,
         )
-
-    @classmethod
-    def _decidir_modelo(
-        cls,
-        duracao_segundos: float,
-        idioma_audio: str,
-        canais_audio: int,
-        possui_fundo_musical: bool,
-        proporcao_silencio: float,
-        ram_livre_gb: float,
-    ) -> tuple[str, str | None, str]:
-        """Árvore de decisão determinística para escolha do modelo Whisperfile ideal."""
-        if ram_livre_gb < 2.2:
-            return "tiny", "small", "diag_motivo_ram_baixa"
-
-        idioma_complexo = idioma_audio.lower() in cls.IDIOMAS_COMPLEXOS
-        video_longo = duracao_segundos >= 900.0
-        video_curto = 0.0 < duracao_segundos <= 180.0
-
-        if not possui_fundo_musical and not idioma_complexo and video_longo and canais_audio <= 2:
-            return "tiny", "small", "diag_motivo_voz_limpa_longo"
-
-        if (canais_audio >= 6 or proporcao_silencio < 0.04) and video_curto and ram_livre_gb >= 6.0:
-            return "medium", "small", "diag_motivo_fundo_denso_curto"
-
-        if possui_fundo_musical or idioma_complexo or canais_audio > 2:
-            alternativa = "medium" if ram_livre_gb >= 4.0 else "tiny"
-            return "small", alternativa, "diag_motivo_musica_ou_und"
-
-        return "small", "tiny", "diag_motivo_equilibrio_padrao"
-

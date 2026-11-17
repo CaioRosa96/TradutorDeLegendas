@@ -3,7 +3,9 @@ import time
 import threading
 
 from .config import GerenciadorConfig
+from .contratos import ConfiguracaoPipeline, InteracaoUsuarioPort
 from .estrategias import FabricaProcessadores
+from .idiomas import Idiomas
 from .logger import app_logger
 from .tradutores import MotorTraducaoGoogle
 
@@ -51,8 +53,37 @@ class OrquestradorTraducoes:
         self._callbacks['ask_output_format'] = ask_output_format_cb
         self._callbacks['ask_dependencies'] = ask_dependencies_cb
 
-    def start(self, files, idioma_origem, idioma_destino, manter_legenda) -> bool:
+    def set_porta_interacao(self, porta: InteracaoUsuarioPort):
+        """Registra uma implementação formal da porta InteracaoUsuarioPort."""
+        self.set_callbacks(
+            log_cb=porta.log,
+            progress_cb=porta.progresso,
+            ask_overwrite_cb=porta.confirmar_sobrescrita,
+            finish_cb=porta.ao_concluir,
+            ask_whisper_cb=porta.autorizar_whisper,
+            ask_output_format_cb=porta.escolher_formato_saida,
+            ask_dependencies_cb=porta.solicitar_dependencias,
+        )
+
+    def start(
+        self,
+        files,
+        idioma_origem: str | None = None,
+        idioma_destino: str | None = None,
+        manter_legenda: bool | None = None,
+        config: ConfiguracaoPipeline | None = None,
+    ) -> bool:
         """Inicia o processamento em lote em uma thread separada, impedindo execuções duplicadas."""
+        if config is not None:
+            idioma_origem = idioma_origem or config.idioma_origem
+            idioma_destino = idioma_destino or config.idioma_destino
+            if manter_legenda is None:
+                manter_legenda = config.manter_legenda_externa
+
+        idioma_origem = idioma_origem or "auto"
+        idioma_destino = idioma_destino or "pt"
+        manter_legenda = bool(manter_legenda)
+
         with self._lock_execucao:
             if self._is_running:
                 return False
@@ -61,7 +92,7 @@ class OrquestradorTraducoes:
         threading.Thread(
             target=self._process_files,
             args=(files, idioma_origem, idioma_destino, manter_legenda),
-            daemon=True
+            daemon=True,
         ).start()
         return True
 
@@ -78,6 +109,13 @@ class OrquestradorTraducoes:
         ask_dependencies = self._callbacks.get('ask_dependencies', None)
         update_progress = self._callbacks.get('progress', lambda c, t: None)
         on_finish = self._callbacks.get('finish', lambda: None)
+
+        dest_norm = Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino)
+        if not dest_norm or dest_norm == "auto":
+            log(f"[ERRO CRÍTICO] Idioma de destino inválido ou não suportado: '{idioma_destino}'. Operação cancelada.")
+            on_finish()
+            return
+        idioma_destino = dest_norm
 
         tempo_total_inicio = time.time()
         fila_inicial = list(files)

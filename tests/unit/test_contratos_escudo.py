@@ -13,7 +13,14 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from tradutor.contratos import EscudoTagsPort, LinhaProtegida, ResultadoTraducaoLinha
+from tradutor.contratos import (
+    ConfiguracaoPipeline,
+    EscudoTagsPort,
+    InteracaoUsuarioPort,
+    LinhaProtegida,
+    ResultadoTraducaoLinha,
+)
+from tradutor.orquestrador import OrquestradorTraducoes
 from tradutor.glossario import GerenciadorGlossario
 
 
@@ -124,3 +131,45 @@ class TestResultadoTraducaoLinha:
         assert resultado.erro is None
         with pytest.raises(dataclasses.FrozenInstanceError):
             resultado.sucesso = False  # type: ignore[misc]
+
+
+class TestConfiguracaoPipelineEInteracaoPort:
+    def test_configuracao_pipeline_imutavel_e_padroes(self):
+        cfg = ConfiguracaoPipeline()
+        assert cfg.idioma_destino == "pt"
+        assert cfg.idioma_origem == "auto"
+        assert cfg.politica_sobrescrita == "perguntar"
+        assert cfg.formato_saida_video == "converter_mkv"
+        assert cfg.manter_legenda_externa is False
+        assert cfg.habilitar_whisper is False
+        assert cfg.forcar_whisper is False
+        assert cfg.modelo_whisper_padrao == "small"
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            cfg.idioma_destino = "en"  # type: ignore[misc]
+
+    def test_interacao_usuario_port_protocolo_e_orquestrador(self, mocker):
+        class AdaptadorInteracaoFake:
+            def log(self, mensagem: str) -> None: pass
+            def progresso(self, atual: int, total: int) -> None: pass
+            def confirmar_sobrescrita(self, nomes_arquivos: str) -> bool: return True
+            def escolher_formato_saida(self, nome_arquivo: str, extensao: str) -> str: return "converter_mkv"
+            def solicitar_dependencias(self) -> bool: return True
+            def autorizar_whisper(self, nome_arquivo: str) -> bool: return True
+            def ao_concluir(self) -> None: pass
+
+        adaptador = AdaptadorInteracaoFake()
+        assert isinstance(adaptador, InteracaoUsuarioPort)
+
+        orquestrador = OrquestradorTraducoes()
+        orquestrador.set_porta_interacao(adaptador)
+        assert orquestrador._callbacks["ask_overwrite"] == adaptador.confirmar_sobrescrita
+        assert orquestrador._callbacks["finish"] == adaptador.ao_concluir
+
+        mock_thread = mocker.patch("threading.Thread")
+        cfg = ConfiguracaoPipeline(idioma_destino="es", idioma_origem="ja", manter_legenda_externa=True)
+        iniciado = orquestrador.start(["fake.srt"], config=cfg)
+        assert iniciado is True
+        mock_thread.assert_called_once()
+        _, kwargs = mock_thread.call_args
+        assert kwargs["args"] == (["fake.srt"], "ja", "es", True)

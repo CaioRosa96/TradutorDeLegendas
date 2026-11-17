@@ -1,4 +1,4 @@
-"""Contratos de domínio compartilhados entre escudo, serviço de tradução e cache."""
+"""Contratos de domínio compartilhados entre escudo, serviço de tradução, cache e orquestração."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -39,6 +39,20 @@ class ResultadoTraducaoLinha:
     erro: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ConfiguracaoPipeline:
+    """Configuração imutável para a execução do pipeline de processamento."""
+
+    idioma_destino: str = "pt"
+    idioma_origem: str = "auto"
+    politica_sobrescrita: str = "perguntar"
+    formato_saida_video: str = "converter_mkv"
+    manter_legenda_externa: bool = False
+    habilitar_whisper: bool = False
+    forcar_whisper: bool = False
+    modelo_whisper_padrao: str = "small"
+
+
 @runtime_checkable
 class EscudoTagsPort(Protocol):
     """Porta do escudo anti-alucinação (tags ASS/HTML e termos do glossário)."""
@@ -64,3 +78,22 @@ class CacheTraducaoPort(Protocol):
         src_lang: str = "auto",
         dest_lang: str = "pt",
     ) -> None: ...
+
+
+@runtime_checkable
+class InteracaoUsuarioPort(Protocol):
+    """Porta formal para interação com o usuário (diálogos, confirmações e progresso)."""
+
+    def log(self, mensagem: str) -> None: ...
+
+    def progresso(self, atual: int, total: int) -> None: ...
+
+    def confirmar_sobrescrita(self, nomes_arquivos: str) -> bool: ...
+
+    def escolher_formato_saida(self, nome_arquivo: str, extensao: str) -> str: ...
+
+    def solicitar_dependencias(self) -> bool: ...
+
+    def autorizar_whisper(self, nome_arquivo: str) -> bool: ...
+
+    def ao_concluir(self) -> None: ...

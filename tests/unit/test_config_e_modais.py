@@ -228,6 +228,9 @@ def test_propagacao_tema_e_idioma_interface(app_interface):
     assert "Portuguese (pt)" in app.sidebar.combo_lang_dest.get()
     assert "Auto (auto)" in app.sidebar.combo_lang.get()
     assert "Processing Queue (0 files)" in app.fila.lbl_titulo.cget("text")
+    assert app.fila.lbl_col_tipo.cget("text") == "FMT"
+    assert app.fila.lbl_col_nome.cget("text") == "FILE"
+    assert app.fila.lbl_col_alvo.cget("text") == "TARGET"
     assert "START TRANSLATION" in app.footer.btn_run.cget("text")
 
     # 3. Testa mudanca de idioma de volta para portugues
@@ -239,6 +242,9 @@ def test_propagacao_tema_e_idioma_interface(app_interface):
     assert "Português (pt)" in app.sidebar.combo_lang_dest.get()
     assert "Automático (auto)" in app.sidebar.combo_lang.get()
     assert "Fila de Processamento (0 arquivos)" in app.fila.lbl_titulo.cget("text")
+    assert app.fila.lbl_col_tipo.cget("text") == "FMT"
+    assert app.fila.lbl_col_nome.cget("text") == "ARQUIVO"
+    assert app.fila.lbl_col_alvo.cget("text") == "DESTINO"
     assert "INICIAR TRADUÇÃO" in app.footer.btn_run.cget("text")
 
 
@@ -314,6 +320,107 @@ def test_remover_item_durante_execucao_nao_reativa_botao_iniciar_nem_duplica_pro
         app.update_idletasks()
 
 
+def test_locales_sobrios_sem_emojis_decorativos():
+    """Garante que os arquivos de tradução não contêm emojis decorativos de dashboard."""
+    import json
+
+    emojis_proibidos = ("🎨", "⚙", "🗑", "🌐", "📖", "📁", "🔍", "🔄")
+    pasta_locales = I18n._diretorio_locales
+    for codigo in I18n.IDIOMAS_SUPORTADOS:
+        caminho = os.path.join(pasta_locales, f"{codigo}.json")
+        with open(caminho, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        for chave, valor in dados.items():
+            for emoji in emojis_proibidos:
+                assert emoji not in valor, (
+                    f"[{codigo}.json] Emoji '{emoji}' encontrado na chave '{chave}': {valor}"
+                )
+
+
+def test_verificacao_atualizacao_ao_iniciar_controlador(mocker):
+    """Garante que o ControladorApp dispara checagem assíncrona ao iniciar conforme preferência."""
+    from tradutor.controlador import ControladorApp
+    from tradutor.atualizador import ResultadoAtualizacao, VerificadorAtualizacao
+    from tradutor.config_usuario import PreferenciasUsuario
+
+    mock_view = mocker.MagicMock()
+    mock_model = mocker.MagicMock()
+
+    # 1. Caso com preferência ATIVADA e nova versão disponível
+    mocker.patch.object(PreferenciasUsuario, "obter", side_effect=lambda k, p=None: True if k == "verificar_atualizacoes_ao_iniciar" else p)
+    res_nova = ResultadoAtualizacao(
+        sucesso=True,
+        atualizacao_disponivel=True,
+        versao_atual="v2.9.0",
+        versao_remota="v2.9.1",
+        url_download="https://github.com/CaioRosa96/TradutorDeLegendas/releases/tag/v2.9.1",
+    )
+    mocker.patch.object(VerificadorAtualizacao, "verificar", return_value=res_nova)
+
+    ctrl = ControladorApp(mock_view, mock_model)
+    # Aguarda a thread de fundo finalizar
+    import time
+    time.sleep(0.1)
+
+    mock_view.perguntar_atualizacao.assert_called_once_with(
+        "v2.9.1",
+        "v2.9.0",
+        "https://github.com/CaioRosa96/TradutorDeLegendas/releases/tag/v2.9.1",
+    )
+
+    # 2. Caso com preferência DESATIVADA
+    mock_view.reset_mock()
+    mocker.patch.object(VerificadorAtualizacao, "verificar")
+    mocker.patch.object(PreferenciasUsuario, "obter", side_effect=lambda k, p=None: False if k == "verificar_atualizacoes_ao_iniciar" else p)
+
+    ControladorApp(mock_view, mock_model)
+    time.sleep(0.05)
+    VerificadorAtualizacao.verificar.assert_not_called()
+    mock_view.perguntar_atualizacao.assert_not_called()
+
+
+def test_interface_perguntar_atualizacao_abre_navegador_se_confirmado(app_interface, mocker):
+    """Garante que InterfaceGrafica.perguntar_atualizacao abre navegador apenas ao confirmar."""
+    mock_askyesno = mocker.patch("tradutor.interface.messagebox.askyesno", return_value=True)
+    mock_webbrowser = mocker.patch("webbrowser.open_new_tab")
+
+    mocker.patch.object(app_interface, "after", side_effect=lambda ms, fn: fn())
+    app_interface.perguntar_atualizacao("v2.9.1", "v2.9.0", "https://github.com/exemplo")
+
+    mock_askyesno.assert_called_once()
+    mock_webbrowser.assert_called_once_with("https://github.com/exemplo")
+
+    # Caso recusado: não deve abrir navegador
+    mock_webbrowser.reset_mock()
+    mock_askyesno.return_value = False
+    app_interface.perguntar_atualizacao("v2.9.1", "v2.9.0", "https://github.com/exemplo")
+    mock_webbrowser.assert_not_called()
+
+
+def test_modal_config_switch_atualizacoes(app_interface, mocker):
+    """Garante que o switch de atualizações ao iniciar reflete e persiste as preferências."""
+    from tradutor.ui.modal_config import ModalConfiguracoes
+    from tradutor.config_usuario import PreferenciasUsuario
+
+    PreferenciasUsuario.definir("verificar_atualizacoes_ao_iniciar", True)
+    modal = ModalConfiguracoes(app_interface)
+    try:
+        assert hasattr(modal, "sw_atualizacoes")
+        assert modal.sw_atualizacoes.get() == 1
+
+        # Desativa o switch
+        modal.sw_atualizacoes.deselect()
+        modal._salvar_switches()
+        assert PreferenciasUsuario.obter("verificar_atualizacoes_ao_iniciar") is False
+
+        # Reativa o switch
+        modal.sw_atualizacoes.select()
+        modal._salvar_switches()
+        assert PreferenciasUsuario.obter("verificar_atualizacoes_ao_iniciar") is True
+    finally:
+        modal.destroy()
+
+
 def test_inicializacao_interface_classica(app_interface, mocker):
     """Garante que a interface clássica pode ser instanciada e configurada com o Controller."""
     import tradutor.interface_classica as mod_classica
@@ -321,7 +428,7 @@ def test_inicializacao_interface_classica(app_interface, mocker):
     from tradutor.orquestrador import OrquestradorTraducoes
     from tradutor.controlador import ControladorApp
 
-    # Encerra limpa a janela moderna antes de instanciar a janela clássica
+    # Encerra a janela moderna como último teste do módulo antes de instanciar a janela clássica
     app_interface.update_idletasks()
     app_interface.destroy()
 
@@ -335,3 +442,5 @@ def test_inicializacao_interface_classica(app_interface, mocker):
     finally:
         app.update_idletasks()
         app.destroy()
+
+

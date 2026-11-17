@@ -1,4 +1,4 @@
-"""View layer: Orquestradora da Interface Grafica Moderna (v2.9.0).
+"""View layer: Orquestradora da Interface Grafica Utilitaria (v2.9.0).
 
 Monta a janela principal e orquestra a comunicacao entre os componentes
 visuais especializados (Header, Sidebar, Fila, Footer e Modais) e o ControladorApp.
@@ -31,6 +31,8 @@ from .ui import (
     ModalTemas,
     ModalConfirmacaoWhisper,
     ModalDependencias,
+    SincronizadorModalThread,
+    GerenciadorFila,
 )
 from .config import GerenciadorConfig
 from .config_usuario import PreferenciasUsuario
@@ -47,16 +49,13 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         if HAS_DND:
             self.TkdndVersion = TkinterDnD._require(self)
 
-        self.title(f"{I18n.t('app_nome')} — v2.9.0")
-        self.geometry("940x670")
-        self.minsize(880, 600)
+        self.title(f"{I18n.t('app_nome')} — v2.9.1")
+        self.geometry("920x620")
+        self.minsize(840, 540)
         self.configure(fg_color=CORES["bg_janela"])
 
         self._controller = None
-        self.files = []
-        self._arquivos_sem_legenda = set()
-        self._modelos_ia_por_arquivo = {}
-        self._em_execucao = False
+        self._gerenciador_fila = GerenciadorFila()
 
         self._montar_layout()
 
@@ -77,25 +76,53 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
 
     # ── 1. Montagem e Composicao dos Componentes ────────────────────────────
 
+    @property
+    def files(self) -> list[str]:
+        return self._gerenciador_fila._arquivos
+
+    @files.setter
+    def files(self, valor: list[str]):
+        self._gerenciador_fila._arquivos = list(valor)
+
+    @property
+    def _arquivos_sem_legenda(self) -> set[str]:
+        return self._gerenciador_fila._arquivos_sem_legenda
+
+    @_arquivos_sem_legenda.setter
+    def _arquivos_sem_legenda(self, valor: set[str]):
+        self._gerenciador_fila._arquivos_sem_legenda = set(valor)
+
+    @property
+    def _modelos_ia_por_arquivo(self) -> dict[str, str]:
+        return self._gerenciador_fila._modelos_ia_por_arquivo
+
+    @property
+    def _em_execucao(self) -> bool:
+        return self._gerenciador_fila.em_execucao
+
+    @_em_execucao.setter
+    def _em_execucao(self, valor: bool):
+        self._gerenciador_fila.em_execucao = valor
+
     def _montar_layout(self):
-        # 1. Cabecalho Superior com Acoes Rapidas
+        # 1. Barra de Ferramentas Superior Compacta
         self.header = HeaderView(
             self,
             on_grimorio_cb=self._abrir_grimorio,
             on_tema_cb=self._abrir_seletor_tema,
-            on_config_cb=self._abrir_configuracoes
+            on_config_cb=self._abrir_configuracoes,
         )
         self.header.pack(side="top", fill="x")
 
-        # 2. Container Central (Duas Colunas)
+        # 2. Container Central Denso (Duas Colunas)
         self.frame_conteudo = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame_conteudo.pack(side="top", fill="both", expand=True, padx=14, pady=(12, 0))
+        self.frame_conteudo.pack(side="top", fill="both", expand=True, padx=8, pady=(8, 0))
 
-        # Coluna Esquerda: Parametros de Traducao
+        # Coluna Esquerda: Painel de Propriedades
         self.sidebar = SidebarView(self.frame_conteudo, on_destino_alterado_cb=self._on_destino_alterado)
-        self.sidebar.pack(side="left", fill="y", padx=(0, 12))
+        self.sidebar.pack(side="left", fill="y", padx=(0, 8))
 
-        # Coluna Direita: Fila e Cards
+        # Coluna Direita: Grade Tabular da Fila
         self.fila = PainelFilaView(
             self.frame_conteudo,
             on_add_cb=self._select_files,
@@ -109,9 +136,9 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.footer = FooterView(
             self,
             on_start_cb=self._on_start_clicked,
-            on_cancel_cb=self._on_cancel_clicked
+            on_cancel_cb=self._on_cancel_clicked,
         )
-        self.footer.pack(side="bottom", fill="x", pady=(10, 0))
+        self.footer.pack(side="bottom", fill="x", pady=(8, 0))
 
     # ── 2. Modais e Personalizacao ──────────────────────────────────────────
 
@@ -133,7 +160,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.footer.aplicar_tema(cores)
 
     def _aplicar_novo_idioma(self, codigo_idioma: str):
-        self.title(f"{I18n.t('app_nome')} — v2.9.0")
+        self.title(f"{I18n.t('app_nome')} — v2.9.1")
         self.header.redefinir_textos()
         self.sidebar.redefinir_textos()
         self.fila.redefinir_textos(len(self.files))
@@ -147,23 +174,21 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             filetypes=[
                 (I18n.t("tipo_todos_suportados"), "*.mkv *.mp4 *.webm *.avi *.wmv *.ass *.srt *.txt"),
                 (I18n.t("tipo_video_mkv"), "*.mkv *.mp4 *.webm *.avi *.wmv"),
-                (I18n.t("tipo_legendas"), "*.ass *.srt *.txt")
-            ]
+                (I18n.t("tipo_legendas"), "*.ass *.srt *.txt"),
+            ],
         )
         if files:
-            novos = [f for f in files if f not in self.files]
-            self.files.extend(novos)
-            self._sincronizar_fila()
-            self._verificar_dependencias_video(novos)
+            novos = self._gerenciador_fila.adicionar_arquivos(files)
+            if novos:
+                self._sincronizar_fila()
+                self._verificar_dependencias_video(novos)
 
     def _on_files_dropped(self, event):
         if not HAS_DND:
             return
         arquivos = self.tk.splitlist(event.data)
-        extensoes_validas = ('.mkv', '.mp4', '.webm', '.avi', '.wmv', '.ass', '.srt', '.txt')
-        validos = [f for f in arquivos if f.lower().endswith(extensoes_validas) and f not in self.files]
+        validos = self._gerenciador_fila.adicionar_arquivos(arquivos)
         if validos:
-            self.files.extend(validos)
             self._sincronizar_fila()
             self._verificar_dependencias_video(validos)
         else:
@@ -171,7 +196,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
 
     def _verificar_dependencias_video(self, arquivos: list, ao_confirmar_cb=None):
         """Exibe a janela de escolha caso haja videos e o MKVToolNix nao seja encontrado."""
-        extensoes_video = ('.mkv', '.mp4', '.webm', '.avi', '.wmv')
+        extensoes_video = (".mkv", ".mp4", ".webm", ".avi", ".wmv")
         possui_video = any(f.lower().endswith(extensoes_video) for f in arquivos)
         if not possui_video or GerenciadorConfig.check_dependencies():
             if ao_confirmar_cb:
@@ -188,7 +213,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         ModalDependencias(self, ao_decidir_cb=_ao_decidir)
 
     def _esta_em_execucao(self) -> bool:
-        """Verifica se há um lote em processamento ativo na interface ou no controlador."""
+        """Verifica se ha um lote em processamento ativo na interface ou no controlador."""
         return self._em_execucao or bool(getattr(self._controller, "is_running", False))
 
     def _remover_arquivo(self, caminho: str):
@@ -196,18 +221,13 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             arq_atual = getattr(self._controller, "arquivo_atual", None)
             if arq_atual and os.path.abspath(arq_atual) == os.path.abspath(caminho):
                 return
-        if caminho in self.files:
-            self.files.remove(caminho)
-            self._arquivos_sem_legenda.discard(caminho)
-            self._modelos_ia_por_arquivo.pop(caminho, None)
+        if self._gerenciador_fila.remover_arquivo(caminho):
             self._sincronizar_fila()
 
     def _limpar_fila(self):
         if self._esta_em_execucao():
             return
-        self.files.clear()
-        self._arquivos_sem_legenda.clear()
-        self._modelos_ia_por_arquivo.clear()
+        self._gerenciador_fila.limpar()
         self._sincronizar_fila()
 
     def _on_destino_alterado(self, novo_destino: str):
@@ -287,7 +307,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.after(0, lambda: self.sidebar.atualizar_opcoes_origem(opcoes, valor_padrao))
 
     def update_whisper_candidates(self, sem_legenda: set):
-        """Exibe o botao de analise de IA apenas nos cards de videos que nao possuem legenda embutida."""
+        """Exibe o botao de analise de IA apenas nas linhas de videos que nao possuem legenda embutida."""
         self._arquivos_sem_legenda = set(sem_legenda)
         modelo_padrao = PreferenciasUsuario.obter("modelo_whisper", "small")
         self.after(
@@ -318,94 +338,75 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         if politica == "pular":
             return False
 
-        evento = threading.Event()
-        resposta = [False]
-
-        def _perguntar():
+        def _perguntar(responder):
             r = messagebox.askyesno(
                 I18n.t("msg_sobrescrever_titulo"),
-                I18n.t("msg_sobrescrever_corpo").format(nomes_arquivos)
+                I18n.t("msg_sobrescrever_corpo").format(nomes_arquivos),
             )
-            resposta[0] = r
-            evento.set()
+            responder(r)
 
-        self.after(0, _perguntar)
-        evento.wait()
-        return resposta[0]
+        return SincronizadorModalThread.executar_dialogo(self, _perguntar, valor_padrao=False)
 
     def ask_output_format(self, nome_arquivo: str, extensao: str) -> str:
         """Pergunta ao usuario se deseja converter um video nao-MKV para .mkv ou manter o formato original."""
-        evento = threading.Event()
-        resposta = ["converter_mkv"]
-
-        def _perguntar():
+        def _perguntar(responder):
             converter = messagebox.askyesno(
                 I18n.t("msg_formato_saida_titulo"),
                 I18n.t("msg_formato_saida_corpo").format(nome_arquivo, extensao.upper()),
             )
-            resposta[0] = "converter_mkv" if converter else "manter_original"
-            evento.set()
+            responder("converter_mkv" if converter else "manter_original")
 
-        self.after(0, _perguntar)
-        evento.wait()
-        return resposta[0]
+        return SincronizadorModalThread.executar_dialogo(self, _perguntar, valor_padrao="converter_mkv")
 
     def ask_dependencies(self) -> bool:
         """Exibe de forma thread-safe a janela de escolha para instalar ou localizar o MKVToolNix."""
         if GerenciadorConfig.check_dependencies():
             return True
 
-        evento = threading.Event()
-        resposta = [False]
+        return SincronizadorModalThread.executar_dialogo(
+            self,
+            lambda responder: ModalDependencias(self, ao_decidir_cb=responder),
+            valor_padrao=False,
+        )
 
-        def _decidir(resolvido: bool):
-            resposta[0] = resolvido
-            evento.set()
+    def perguntar_atualizacao(self, versao_remota: str, versao_atual: str, url_download: str):
+        """Exibe diálogo amigável perguntando se o usuário deseja atualizar para a versão mais recente."""
+        def _exibir():
+            titulo = I18n.t("msg_atualizacao_titulo")
+            corpo = I18n.t("msg_atualizacao_corpo").format(versao_remota, versao_atual)
+            if messagebox.askyesno(titulo, corpo):
+                import webbrowser
+                webbrowser.open_new_tab(url_download)
 
-        self.after(0, lambda: ModalDependencias(self, ao_decidir_cb=_decidir))
-        evento.wait()
-        return resposta[0]
+        self.after(500, _exibir)
 
     def ask_whisper_permission(self, nome_arquivo: str) -> bool:
         """Exibe modal interativo de permissao, diagnostico de video e selecao/download de modelo da IA local Whisperfile."""
-        caminho_completo = (
-            nome_arquivo
-            if os.path.isfile(nome_arquivo)
-            else next(
-                (f for f in self.files if os.path.basename(f) == os.path.basename(nome_arquivo)),
-                None,
-            )
-        )
+        caminho_completo = self._gerenciador_fila.resolver_caminho_por_nome(nome_arquivo)
         if caminho_completo and caminho_completo in self._modelos_ia_por_arquivo:
             PreferenciasUsuario.definir("modelo_whisper", self._modelos_ia_por_arquivo[caminho_completo])
             return True
 
-        evento = threading.Event()
-        resposta = [False]
+        def _abrir_modal(responder):
+            def _decidir(autorizado: bool):
+                if autorizado and caminho_completo:
+                    modelo_escolhido = PreferenciasUsuario.obter("modelo_whisper", "small")
+                    self._modelos_ia_por_arquivo[caminho_completo] = modelo_escolhido
+                    self.fila.atualizar_status_ia(
+                        self._arquivos_sem_legenda,
+                        self._modelos_ia_por_arquivo,
+                        modelo_padrao=modelo_escolhido,
+                    )
+                responder(autorizado)
 
-        def _decidir(autorizado: bool):
-            if autorizado and caminho_completo:
-                modelo_escolhido = PreferenciasUsuario.obter("modelo_whisper", "small")
-                self._modelos_ia_por_arquivo[caminho_completo] = modelo_escolhido
-                self.fila.atualizar_status_ia(
-                    self._arquivos_sem_legenda,
-                    self._modelos_ia_por_arquivo,
-                    modelo_padrao=modelo_escolhido,
-                )
-            resposta[0] = autorizado
-            evento.set()
-
-        self.after(
-            0,
-            lambda: ModalConfirmacaoWhisper(
+            ModalConfirmacaoWhisper(
                 self,
                 nome_arquivo,
                 ao_decidir_cb=_decidir,
                 caminho_arquivo=caminho_completo,
-            ),
-        )
-        evento.wait()
-        return resposta[0]
+            )
+
+        return SincronizadorModalThread.executar_dialogo(self, _abrir_modal, valor_padrao=False)
 
     def on_processing_finished(self):
         """Restaura controles e notifica usuario ao concluir."""

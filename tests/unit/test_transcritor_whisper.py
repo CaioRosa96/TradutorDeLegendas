@@ -153,6 +153,7 @@ def test_transcrever_erros_binario_ausente_e_returncode(tmp_path, mocker):
 def test_manipulador_mkv_extrair_audio_com_ffmpeg_converte_para_wav_16khz(tmp_path, mocker):
     """Converte áudio AAC/Opus do MKV para WAV 16 kHz mono quando o FFmpeg está disponível."""
     mocker.patch.object(GerenciadorConfig, "get_mkv_bins", return_value=("mkvmerge.exe", "mkvextract.exe"))
+    mocker.patch.object(GerenciadorConfig, "get_ffmpeg_path", return_value="C:/ffmpeg/ffmpeg.exe")
     mocker.patch.object(ManipuladorMkv, "_localizar_ffmpeg", return_value="C:/ffmpeg/ffmpeg.exe")
 
     info_mkv = {
@@ -355,6 +356,7 @@ def test_recomendador_whisper_analisa_video_com_musica_e_und(tmp_path, mocker):
     video_fake.write_text("mkv", encoding="utf-8")
 
     mocker.patch.object(GerenciadorConfig, "get_mkv_bins", return_value=("mkvmerge.exe", "mkvextract.exe"))
+    mocker.patch.object(GerenciadorConfig, "get_ffmpeg_path", return_value="C:/ffmpeg/ffmpeg.exe")
     mocker.patch.object(ManipuladorMkv, "_localizar_ffmpeg", return_value="C:/ffmpeg/ffmpeg.exe")
     mocker.patch.object(RecomendadorModeloWhisper, "obter_recursos_sistema", return_value=(12.0, 8))
 
@@ -489,6 +491,7 @@ def test_politica_formato_saida_mp4_webm_avi_wmv(tmp_path, mocker):
 
 def test_embutir_legenda_mp4_e_webm_usa_codecs_corretos_ffmpeg(tmp_path, mocker):
     """Garante que embutir_legenda usa mov_text para .mp4 e webvtt para .webm via FFmpeg."""
+    mocker.patch.object(GerenciadorConfig, "get_ffmpeg_path", return_value="C:/ffmpeg/ffmpeg.exe")
     mocker.patch.object(ManipuladorMkv, "_localizar_ffmpeg", return_value="C:/ffmpeg/ffmpeg.exe")
     mock_run = mocker.patch(
         "subprocess.run",

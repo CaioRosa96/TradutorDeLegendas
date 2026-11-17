@@ -10,6 +10,8 @@ from .modal_config import ModalConfiguracoes
 from .modal_tema import ModalTemas
 from .modal_whisper import ModalConfirmacaoWhisper, PainelSeletorWhisper
 from .modal_dependencias import ModalDependencias
+from .sincronizador_thread import SincronizadorModalThread
+from .gerenciador_fila import GerenciadorFila
 
 __all__ = [
     "CORES",
@@ -28,4 +30,6 @@ __all__ = [
     "ModalConfirmacaoWhisper",
     "PainelSeletorWhisper",
     "ModalDependencias",
+    "SincronizadorModalThread",
+    "GerenciadorFila",
 ]
