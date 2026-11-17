@@ -2,6 +2,7 @@ import os
 import re
 from .config import GerenciadorConfig
 from .contratos import LinhaProtegida
+from .glossario_port import AdaptadorAniListGraphQL, BuscadorEntidadesPort
 
 class GerenciadorGlossario:
     """Gerenciador do Dicionário Anti-Tradução (Glossário).
@@ -11,10 +12,17 @@ class GerenciadorGlossario:
     e restaura os termos originais após a tradução, impedindo alucinações da API.
     """
     
-    def __init__(self, filepath=None, video_filename=None, habilitar_auto_alimentar=False):
+    def __init__(
+        self,
+        filepath=None,
+        video_filename=None,
+        habilitar_auto_alimentar=False,
+        buscador_entidades: BuscadorEntidadesPort | None = None,
+    ):
         self.filepath = filepath or GerenciadorConfig.ARQUIVO_GLOSSARIO_PADRAO
         self.video_filename = video_filename
         self.habilitar_auto_alimentar = habilitar_auto_alimentar
+        self.buscador_entidades = buscador_entidades
         self.glossario_map = {}
         self.load()
 
@@ -90,15 +98,20 @@ class GerenciadorGlossario:
                         self._load_file(caminho_especifico)
                         encontrou_especifico = True
             
-            # Se não encontrou na pasta e a busca automática estiver ativada, roda o extrator
-            if not encontrou_especifico and self.habilitar_auto_alimentar:
-                try:
-                    from .anilist import auto_alimentar
-                    novo_arquivo = auto_alimentar(self.video_filename, dir_especificos)
-                    if novo_arquivo and os.path.exists(novo_arquivo):
-                        self._load_file(novo_arquivo)
-                except Exception:
-                    pass
+        # Se não encontrou na pasta e a busca automática estiver ativada, utiliza o buscador de entidades
+        if self.video_filename and not encontrou_especifico and self.habilitar_auto_alimentar:
+            try:
+                buscador = self.buscador_entidades or AdaptadorAniListGraphQL(
+                    pasta_destino=dir_especificos,
+                    persistir_arquivo=True,
+                )
+                nomes = buscador.buscar_nomes_proprios(self.video_filename)
+                if nomes:
+                    for nome in nomes:
+                        if nome and nome not in self.glossario_map:
+                            self.glossario_map[nome] = nome
+            except Exception:
+                pass
 
     _PADRAO_TAGS_FORMATACAO = re.compile(r'(\{[^}\n]+\}|</?[a-zA-Z][^>\n]*>)')
 
