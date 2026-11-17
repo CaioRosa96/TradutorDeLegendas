@@ -17,6 +17,7 @@ class PreferenciasUsuario:
         "abrir_pasta_ao_concluir": False,
         "politica_sobrescrita": "perguntar",  # "perguntar", "sobrescrever", "pular"
         "formato_saida_video": "perguntar",  # "perguntar", "converter_mkv", "manter_original"
+        "verificar_atualizacoes_ao_iniciar": True,
         "mkvtoolnix_custom": "",
         "ffmpeg_custom": "",
         "auto_alimentar_anilist": True,

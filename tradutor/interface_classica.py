@@ -291,3 +291,14 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.textbox.delete("0.0", "end")
         self.textbox.configure(state="disabled")
         self._select_files()
+
+    def perguntar_atualizacao(self, versao_remota: str, versao_atual: str, url_download: str):
+        """Exibe diálogo amigável perguntando se o usuário deseja atualizar para a versão mais recente."""
+        def _exibir():
+            titulo = I18n.t("msg_atualizacao_titulo")
+            corpo = I18n.t("msg_atualizacao_corpo").format(versao_remota, versao_atual)
+            if messagebox.askyesno(titulo, corpo):
+                import webbrowser
+                webbrowser.open_new_tab(url_download)
+
+        self.after(500, _exibir)

@@ -20,6 +20,27 @@ class ControladorApp:
             ask_dependencies_cb=getattr(self._view, "ask_dependencies", None),
         )
 
+        from .config_usuario import PreferenciasUsuario
+        if PreferenciasUsuario.obter("verificar_atualizacoes_ao_iniciar", True):
+            self._verificar_atualizacao_assincrona()
+
+    def _verificar_atualizacao_assincrona(self):
+        """Consulta a API do GitHub Releases em segundo plano e notifica a View se houver nova versão."""
+        import threading
+        from .atualizador import VerificadorAtualizacao
+
+        def _worker():
+            resultado = VerificadorAtualizacao.verificar()
+            if resultado.sucesso and resultado.atualizacao_disponivel:
+                if hasattr(self._view, "perguntar_atualizacao"):
+                    self._view.perguntar_atualizacao(
+                        resultado.versao_remota,
+                        resultado.versao_atual,
+                        resultado.url_download,
+                    )
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     @property
     def is_running(self) -> bool:
         """Retorna se o orquestrador está executando um lote no momento."""
