@@ -48,6 +48,81 @@ class ManipuladorMkv:
         return GerenciadorConfig.get_ffmpeg_path()
 
     @staticmethod
+    def listar_trilhas(caminho_arquivo: str):
+        """Inspeciona o contêiner multimídia via mkvmerge -J e retorna as trilhas encontradas."""
+        if not GerenciadorConfig.check_dependencies():
+            return []
+
+        mkvmerge, _ = GerenciadorConfig.get_mkv_bins()
+        comando = [mkvmerge, "-J", caminho_arquivo]
+        try:
+            resultado = subprocess.run(
+                comando, capture_output=True, text=True,
+                check=True, encoding='utf-8', errors='ignore',
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            info = json.loads(resultado.stdout)
+        except Exception:
+            return []
+
+        from .manipulador_midia import TrilhaMidia
+
+        trilhas = []
+        for track in info.get("tracks", []):
+            t_id = track.get("id", 0)
+            t_type = track.get("type", "")
+            codec = track.get("codec", "")
+            props = track.get("properties", {})
+            codec_id = props.get("codec_id", "")
+            lang = props.get("language", "und") or "und"
+            name = props.get("track_name", "")
+            formato = ""
+            if t_type == "subtitles":
+                formato = ManipuladorMkv._detectar_formato(codec.lower(), codec_id.lower()) or ""
+            elif t_type == "audio":
+                formato = ManipuladorMkv._detectar_formato_audio(codec.lower(), codec_id.lower()) or ""
+
+            trilhas.append(
+                TrilhaMidia(
+                    id=t_id,
+                    tipo=t_type,
+                    idioma=lang.lower(),
+                    codec=codec,
+                    formato=formato,
+                    nome=name,
+                )
+            )
+        return trilhas
+
+    @staticmethod
+    def extrair_trilha(caminho_mkv: str, track_id: int, caminho_destino: str) -> str:
+        """Extrai uma trilha específica (.ass, .srt ou áudio) via mkvextract ou ffmpeg."""
+        if not caminho_mkv.lower().endswith(".mkv"):
+            ffmpeg_bin = ManipuladorMkv._localizar_ffmpeg()
+            if ffmpeg_bin:
+                cmd_ff = [ffmpeg_bin, "-y", "-i", caminho_mkv, "-map", f"0:{track_id}", caminho_destino]
+                res_ff = subprocess.run(
+                    cmd_ff, check=False, capture_output=True, text=True,
+                    encoding="utf-8", errors="ignore",
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                )
+                if res_ff.returncode == 0:
+                    return caminho_destino
+                raise ValueError("Nenhuma legenda compatível pôde ser extraída deste vídeo.")
+
+        _, mkvextract = GerenciadorConfig.get_mkv_bins()
+        comando_extrair = [mkvextract, "tracks", caminho_mkv, f"{track_id}:{caminho_destino}"]
+        resultado_extrair = subprocess.run(
+            comando_extrair, check=False, capture_output=True, text=True,
+            encoding='utf-8', errors='ignore',
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        if resultado_extrair.returncode not in (0, 1):
+            erro_msg = resultado_extrair.stderr.strip() or f"Código de saída {resultado_extrair.returncode}"
+            raise RuntimeError(f"Erro ao extrair trilha do MKV: {erro_msg}")
+        return caminho_destino
+
+    @staticmethod
     def listar_idiomas_legendas(caminhos_mkv):
         """Retorna uma lista de idiomas únicos encontrados nos arquivos MKV fornecidos."""
         if not GerenciadorConfig.check_dependencies():
@@ -156,28 +231,7 @@ class ManipuladorMkv:
         caminho_extraido = os.path.join(pasta_destino, f"{nome_base}_ORIGINAL{selected_ext}")
 
         logger("Extraindo trilha original para processamento...")
-        if not caminho_mkv.lower().endswith(".mkv"):
-            ffmpeg_bin = ManipuladorMkv._localizar_ffmpeg()
-            if ffmpeg_bin:
-                cmd_ff = [ffmpeg_bin, "-y", "-i", caminho_mkv, "-map", f"0:{track_id}", caminho_extraido]
-                res_ff = subprocess.run(
-                    cmd_ff, check=False, capture_output=True, text=True,
-                    encoding="utf-8", errors="ignore",
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-                )
-                if res_ff.returncode == 0:
-                    return caminho_extraido, idioma_real
-                raise ValueError("Nenhuma legenda compatível pôde ser extraída deste vídeo.")
-
-        comando_extrair = [mkvextract, "tracks", caminho_mkv, f"{track_id}:{caminho_extraido}"]
-        resultado_extrair = subprocess.run(
-            comando_extrair, check=False, capture_output=True, text=True,
-            encoding='utf-8', errors='ignore',
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        )
-        if resultado_extrair.returncode not in (0, 1):
-            erro_msg = resultado_extrair.stderr.strip() or f"Código de saída {resultado_extrair.returncode}"
-            raise RuntimeError(f"Erro ao extrair trilha do MKV: {erro_msg}")
+        ManipuladorMkv.extrair_trilha(caminho_mkv, track_id, caminho_extraido)
         return caminho_extraido, idioma_real
 
     @staticmethod

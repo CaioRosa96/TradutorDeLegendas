@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping, Protocol, Sequence, runtime_checkable
 
+from .manipulador_midia import ManipuladorMidiaPort, TrilhaMidia
+
 
 @dataclass(frozen=True, slots=True)
 class LinhaProtegida:
