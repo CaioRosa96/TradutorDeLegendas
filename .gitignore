@@ -394,3 +394,8 @@ tests/output/
 # Arquivos locais de projeto Visual Studio
 *.pyproj
 *.slnx
+
+# Rascunhos e pacotes temporarios de design
+contexto_ui.txt
+tradutor_ui_sobria.zip
+tradutor_ui_sobria/

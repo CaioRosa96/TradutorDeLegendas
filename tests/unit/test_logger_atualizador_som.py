@@ -107,7 +107,7 @@ def test_handler_arquivo_com_teto_suprime_apos_limite(tmp_path):
 def test_cabecalho_sessao_e_deteccao_windows(monkeypatch):
     """Verifica a formatacao do cabecalho de sessao com versao e sistema operacional."""
     cabecalho = gerar_cabecalho_sessao()
-    assert "Tradutor de Legendas v2.9.0" in cabecalho
+    assert "Tradutor de Legendas v2.9.1" in cabecalho
     assert "Python" in cabecalho
     assert detectar_sistema_operacional() in cabecalho
 
@@ -174,4 +174,16 @@ def test_sintese_wav_acorde_conclusao_e_reproducao_memoria(mocker):
     args, _ = mock_winsound.PlaySound.call_args
     assert args[0] == wav_bytes
     assert args[1] & mock_winsound.SND_MEMORY
+
+
+def test_escolher_diretorio_logs_respeita_variavel_ambiente_tradutor_log_dir(tmp_path, monkeypatch):
+    """Garante que escolher_diretorio_logs(None) prioriza TRADUTOR_LOG_DIR quando definida."""
+    pasta_env = str(tmp_path / "logs_env")
+    monkeypatch.setenv("TRADUTOR_LOG_DIR", pasta_env)
+
+    escolhido = escolher_diretorio_logs(None)
+    assert escolhido == pasta_env
+    assert os.path.isdir(pasta_env)
+    assert not os.path.exists(os.path.join(pasta_env, ".sonda_escrita"))
+
 

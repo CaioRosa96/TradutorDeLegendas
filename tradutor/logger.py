@@ -12,7 +12,7 @@ from .config import GerenciadorConfig
 
 DIAS_RETENCAO = 7
 LIMITE_BYTES_ARQUIVO = 20 * 1024 * 1024  # 20 MB por arquivo diario
-VERSAO_APP = "2.9.0"
+VERSAO_APP = "2.9.1"
 
 _PADRAO_ARQUIVO_LOG = re.compile(r"^tradutor_(\d{8})\.log$")
 _hooks_instalados = False
@@ -26,8 +26,11 @@ def escolher_diretorio_logs(diretorio_preferido: str | None = None) -> str:
     faz fallback automatico para %LOCALAPPDATA%\\TradutorLegendas26\\logs.
     """
     candidatos = []
+    env_dir = os.environ.get("TRADUTOR_LOG_DIR")
     if diretorio_preferido:
         candidatos.append(diretorio_preferido)
+    elif env_dir:
+        candidatos.append(env_dir)
     else:
         candidatos.append(os.path.join(GerenciadorConfig.DIRETORIO_EXECUCAO, "logs"))
 
