@@ -3,6 +3,7 @@ import shutil
 
 from .processador_base import ProcessadorArquivoBase
 from ..manipulador_mkv import ManipuladorMkv
+from ..manipulador_midia import ManipuladorMidiaPort, AdaptadorMkvToolNixFFmpeg, TrilhaMidia
 from ..config import GerenciadorConfig
 from ..config_usuario import PreferenciasUsuario
 from ..idiomas import Idiomas
@@ -12,9 +13,59 @@ from ..transcritores import MotorWhisperfile
 class ProcessadorMkv(ProcessadorArquivoBase):
     """Estratégia específica para arquivos de vídeo MKV com suporte a fallback de transcrição ASR."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        manipulador_midia: ManipuladorMidiaPort | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._transcrito_por_ia = False
+        self._manipulador_midia: ManipuladorMidiaPort = (
+            manipulador_midia
+            if manipulador_midia is not None
+            else AdaptadorMkvToolNixFFmpeg(logger=self.log)
+        )
+
+    @property
+    def manipulador_midia(self) -> ManipuladorMidiaPort:
+        """Retorna o manipulador de mídia em uso."""
+        return self._manipulador_midia
+
+    def _extrair_legenda_via_porta(self, origem: str, destino_dir: str, idioma_origem: str) -> tuple[str, str]:
+        """Extrai a legenda de origem utilizando o manipulador de mídia injetado."""
+        trilhas = self._manipulador_midia.listar_trilhas(origem)
+        trilhas_sub = [
+            t for t in trilhas
+            if t.tipo == "subtitles" and (t.formato in (".ass", ".srt") or not t.formato)
+        ]
+        if not trilhas_sub:
+            trilhas_sub = [t for t in trilhas if t.tipo == "subtitles"]
+
+        if not trilhas_sub:
+            raise ValueError("Nenhuma legenda (.ass ou .srt) encontrada neste vídeo.")
+
+        trilha_escolhida = None
+        pref = (idioma_origem or "").strip().lower()
+        if pref and pref != "auto":
+            for t in trilhas_sub:
+                if t.idioma.lower() == pref:
+                    trilha_escolhida = t
+                    break
+        if trilha_escolhida is None:
+            trilha_escolhida = trilhas_sub[0]
+
+        idioma_real = trilha_escolhida.idioma or "und"
+        if pref and pref != "auto" and pref != idioma_real.lower():
+            self.log(f"[AVISO] Idioma '{pref}' ausente neste vídeo; usando a faixa '{idioma_real}'.")
+
+        ext = trilha_escolhida.formato if trilha_escolhida.formato in (".ass", ".srt") else ".ass"
+        nome_base = os.path.basename(origem).rsplit(".", 1)[0]
+        caminho_extraido = os.path.join(destino_dir, f"{nome_base}_ORIGINAL{ext}")
+
+        self.log("Extraindo trilha original para processamento...")
+        caminho_final = self._manipulador_midia.extrair_legenda(origem, trilha_escolhida.id, caminho_extraido)
+        return caminho_final, idioma_real
 
     def prepare(self, origem, idioma_origem):
         self._transcrito_por_ia = False
@@ -35,7 +86,9 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         if not forcar_whisper:
             self.log(f"[Etapa 1/3] Extração de Mídia via MKVToolNix (Idioma: {idioma_origem or 'Qualquer'})")
             try:
-                return ManipuladorMkv.extrair_legenda(origem, destino_dir, idioma_origem, self.log)
+                if isinstance(self._manipulador_midia, AdaptadorMkvToolNixFFmpeg):
+                    return ManipuladorMkv.extrair_legenda(origem, destino_dir, idioma_origem, self.log)
+                return self._extrair_legenda_via_porta(origem, destino_dir, idioma_origem)
             except ValueError as erro_sem_legenda:
                 if self.ask_whisper is not None:
                     nome_arq = os.path.basename(origem)
@@ -60,7 +113,16 @@ class ProcessadorMkv(ProcessadorArquivoBase):
                 "Transcrição de áudio autorizada, mas o binário Whisperfile não foi encontrado em bin/ ou mkvtoolnix/."
             )
 
-        caminho_audio, idioma_trilha = ManipuladorMkv.extrair_audio(origem, destino_dir, idioma_origem, self.log)
+        if isinstance(self._manipulador_midia, AdaptadorMkvToolNixFFmpeg):
+            caminho_audio, idioma_trilha = ManipuladorMkv.extrair_audio(origem, destino_dir, idioma_origem, self.log)
+        else:
+            nome_base = os.path.basename(origem).rsplit(".", 1)[0]
+            caminho_audio_dest = os.path.join(destino_dir, f"{nome_base}_ORIGINAL_AUDIO.wav")
+            caminho_audio = self._manipulador_midia.extrair_audio(origem, caminho_audio_dest)
+            trilhas = self._manipulador_midia.listar_trilhas(origem)
+            trilhas_audio = [t for t in trilhas if t.tipo == "audio"]
+            idioma_trilha = trilhas_audio[0].idioma if trilhas_audio else (idioma_origem or "und")
+
         idioma_efetivo = idioma_trilha
         if idioma_trilha in ("und", "auto", "") and idioma_origem and idioma_origem not in ("auto", "und"):
             idioma_efetivo = idioma_origem
@@ -138,7 +200,12 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         caminho_mkv_saida = caminhos_saida.get('video')
 
         if caminho_mkv_saida:
-            ManipuladorMkv.embutir_legenda(origem, legenda_traduzida, caminho_mkv_saida, idioma_destino, self.log)
+            self._manipulador_midia.embutir_legenda(
+                video=origem,
+                legenda=legenda_traduzida,
+                saida=caminho_mkv_saida,
+                idioma=idioma_destino,
+            )
 
         try:
             self.cleanup_temporary(arq_trabalho)

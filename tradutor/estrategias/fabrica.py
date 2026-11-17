@@ -20,6 +20,7 @@ class FabricaProcessadores:
         ask_output_format_cb=None,
         ask_dependencies_cb=None,
         output_dir=None,
+        manipulador_midia=None,
     ):
         ext = filepath.lower()
         if ext.endswith(FabricaProcessadores.EXTENSOES_VIDEO):
@@ -33,6 +34,7 @@ class FabricaProcessadores:
                 ask_output_format_cb=ask_output_format_cb,
                 ask_dependencies_cb=ask_dependencies_cb,
                 output_dir=output_dir,
+                manipulador_midia=manipulador_midia,
             )
         elif ext.endswith(FabricaProcessadores.EXTENSOES_LEGENDA):
             return ProcessadorSrt(
