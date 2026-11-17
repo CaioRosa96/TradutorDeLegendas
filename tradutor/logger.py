@@ -9,10 +9,11 @@ import tempfile
 import threading
 from datetime import datetime, timedelta
 from .config import GerenciadorConfig
+from .versao import InfoVersao
 
 DIAS_RETENCAO = 7
 LIMITE_BYTES_ARQUIVO = 20 * 1024 * 1024  # 20 MB por arquivo diario
-VERSAO_APP = "2.9.1"
+VERSAO_APP = InfoVersao.NUMERO
 
 _PADRAO_ARQUIVO_LOG = re.compile(r"^tradutor_(\d{8})\.log$")
 _hooks_instalados = False

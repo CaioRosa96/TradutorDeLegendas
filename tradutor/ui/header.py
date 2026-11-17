@@ -3,6 +3,7 @@
 import customtkinter as ctk
 from .tema import CORES
 from ..i18n import I18n
+from ..versao import InfoVersao
 
 
 class HeaderView(ctk.CTkFrame):
@@ -48,7 +49,7 @@ class HeaderView(ctk.CTkFrame):
 
         self.badge_versao = ctk.CTkLabel(
             self,
-            text="v2.9.1",
+            text=InfoVersao.tag(),
             font=("Consolas", 10),
             fg_color=CORES["bg_card"],
             text_color=CORES["texto_secundario"],
@@ -157,6 +158,7 @@ class HeaderView(ctk.CTkFrame):
 
     def redefinir_textos(self):
         """Atualiza os textos traduziveis apos troca de idioma."""
+        self.badge_versao.configure(text=InfoVersao.tag())
         self.lbl_sub.configure(text=I18n.t("app_sub"))
         self.btn_config.configure(text=I18n.t("btn_config"))
         self.btn_tema.configure(text=I18n.t("btn_visualizar"))

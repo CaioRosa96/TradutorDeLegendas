@@ -11,6 +11,7 @@ from ..config import GerenciadorConfig
 from ..config_usuario import PreferenciasUsuario
 from ..i18n import I18n
 from ..instalador_dependencias import InstaladorDependencias
+from ..versao import InfoVersao
 from .modal_dependencias import ModalDependencias
 from .modal_whisper import PainelSeletorWhisper
 from .tema import CORES
@@ -289,7 +290,8 @@ class ModalConfiguracoes(ctk.CTkToplevel):
     def _montar_aba_sobre(self, aba: ctk.CTkBaseClass):
         """Monta informações de versão, links de repositório e verificador de atualização."""
         ctk.CTkLabel(aba, text="TRADUTOR DE LEGENDAS", font=(self._fonte_ui, 16, "bold"), text_color=CORES["texto_principal"]).pack(pady=(20, 2))
-        self.lbl_sobre_versao = ctk.CTkLabel(aba, text=f"{I18n.t('lbl_versao')} (Lossless Modern UI)", font=(self._fonte_ui, 12), text_color=CORES["destaque_azul"])
+        texto_versao = InfoVersao.formatar_rotulo_sobre(I18n.t("lbl_versao"))
+        self.lbl_sobre_versao = ctk.CTkLabel(aba, text=texto_versao, font=(self._fonte_ui, 12), text_color=CORES["destaque_azul"])
         self.lbl_sobre_versao.pack(pady=(0, 10))
 
         self.lbl_sobre_desc = ctk.CTkLabel(aba, text=I18n.t("desc_sobre"), font=(self._fonte_ui, 11), text_color=CORES["texto_secundario"], justify="center")
@@ -481,7 +483,7 @@ class ModalConfiguracoes(ctk.CTkToplevel):
             self.tabview.rename(self._nome_aba_sobre, novo_sobre)
             self._nome_aba_sobre = novo_sobre
 
-        self.lbl_sobre_versao.configure(text=f"{I18n.t('lbl_versao')} (Lossless Modern UI)")
+        self.lbl_sobre_versao.configure(text=InfoVersao.formatar_rotulo_sobre(I18n.t("lbl_versao")))
         self.lbl_sobre_desc.configure(text=I18n.t("desc_sobre"))
         self.btn_github.configure(text=I18n.t("btn_github"))
         if self.btn_verificar_update.cget("state") == "normal":

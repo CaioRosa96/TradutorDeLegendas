@@ -39,6 +39,7 @@ from .config_usuario import PreferenciasUsuario
 from .idiomas import Idiomas
 from .i18n import I18n
 from .som import tocar_som_conclusao
+from .versao import InfoVersao
 
 
 class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
@@ -49,7 +50,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         if HAS_DND:
             self.TkdndVersion = TkinterDnD._require(self)
 
-        self.title(f"{I18n.t('app_nome')} — v2.9.1")
+        self.title(InfoVersao.titulo_janela(I18n.t("app_nome")))
         self.geometry("920x620")
         self.minsize(840, 540)
         self.configure(fg_color=CORES["bg_janela"])
@@ -160,7 +161,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         self.footer.aplicar_tema(cores)
 
     def _aplicar_novo_idioma(self, codigo_idioma: str):
-        self.title(f"{I18n.t('app_nome')} — v2.9.1")
+        self.title(InfoVersao.titulo_janela(I18n.t("app_nome")))
         self.header.redefinir_textos()
         self.sidebar.redefinir_textos()
         self.fila.redefinir_textos(len(self.files))
