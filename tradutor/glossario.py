@@ -18,6 +18,21 @@ class GerenciadorGlossario:
         self.glossario_map = {}
         self.load()
 
+    @staticmethod
+    def _extrair_aliases_arquivo(path: str) -> list[str]:
+        """Lê diretivas '# Alias: a, b' do glossário em minúsculas para casamento alternativo."""
+        aliases: list[str] = []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    limpa = line.strip()
+                    if limpa.lower().startswith('# alias:'):
+                        bruto = limpa.split(':', 1)[1]
+                        aliases.extend(a.strip().lower() for a in bruto.split(',') if a.strip())
+        except Exception:
+            pass
+        return aliases
+
     def _load_file(self, path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
@@ -68,9 +83,11 @@ class GerenciadorGlossario:
             video_name_lower = self.video_filename.lower()
             for arquivo in os.listdir(dir_especificos):
                 if arquivo.lower().endswith(".txt") and arquivo.lower() != "leia_me.txt":
-                    nome_anime = arquivo[:-4].lower() # remove .txt
-                    if nome_anime in video_name_lower:
-                        self._load_file(os.path.join(dir_especificos, arquivo))
+                    caminho_especifico = os.path.join(dir_especificos, arquivo)
+                    nome_anime = arquivo[:-4].lower()  # remove .txt
+                    aliases = self._extrair_aliases_arquivo(caminho_especifico)
+                    if nome_anime in video_name_lower or any(alias in video_name_lower for alias in aliases):
+                        self._load_file(caminho_especifico)
                         encontrou_especifico = True
             
             # Se não encontrou na pasta e a busca automática estiver ativada, roda o extrator

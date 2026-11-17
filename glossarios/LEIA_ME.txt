@@ -1,0 +1,2 @@
+Coloque aqui dicionários específicos de animes (ex: Bleach.txt, One Piece.txt).
+Se o nome do vídeo que está sendo traduzido contiver o nome do arquivo, este dicionário será carregado automaticamente junto com o global.
