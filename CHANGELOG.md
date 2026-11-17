@@ -4,6 +4,31 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 
 ---
 
+## [2.9.1] - 2026-11-16
+
+### Adicionado
+- Checagem automatica e assincrona de atualizacao ao iniciar (`ControladorApp`), com dialogo nativo de confirmacao ao usuario e opcao configuravel (`verificar_atualizacoes_ao_iniciar`) no modal de Configuracoes.
+- Modulo CLI headless sanitizado (`tradutor/cli.py`) para automacao via terminal e integracao de pipelines com argumentos `--dest`, `--force-whisper` e `--json`.
+- Repositorio desacoplado de modelos Whisperfile (`RepositorioModelosWhisper`), com download streaming atomico (`.part`) e catalogo isolado.
+- Perfil consolidado de hardware e midia (`PerfilHardwareMidia`) com arvore de decisao de modelo de IA puramente deterministica no `RecomendadorModeloWhisper`.
+- Sincronizador de threads na UI (`SincronizadorModalThread`) para chamadas sincronas padronizadas e thread-safe.
+- Gerenciador de estado da fila desacoplado (`GerenciadorFila`) em Python puro, testavel sem inicializar bibliotecas visuais de interface.
+- Contratos de execucao imutaveis (`ConfiguracaoPipeline`) e protocolo de interacao (`InteracaoUsuarioPort`) para integracao direta com ecossistemas externos (como Omnime).
+- Suporte a diretiva `# Alias:` e limpeza automatica de marcadores de temporada (`SxxExx`) na sincronizacao de glossarios via AniList.
+
+### Modificado
+- Refatoracao do `ModalConfiguracoes` com metodos de fabrica de componentes (`_criar_frame_card`, `_criar_dropdown`, `_criar_botao`, `_criar_switch`, `_criar_label_secao`), reduzindo o boilerplate de estilo e mantendo o raio de card padronizado (`raio_card=2`).
+- Interface grafica utilitaria Desktop v2.9.1 calibrada com layout compacto de 2 colunas, grade tabular densa de 30px e badges discretos.
+- Suporte a variacoes regionais de idioma de destino (ex.: `pt-br`, `pt_br`, `por` convertidos deterministicamente para `pt`).
+- Normalizacao de sufixo de arquivos de video gerados para `_PT.mkv`.
+
+### Corrigido
+- Calibracao do tema visual MS-DOS Retro para monocromia autentica de fosforo verde (`#33ff33` sobre preto puro, sem ambar) com conformidade estrita aos testes de contraste WCAG AAA.
+- Persistencia definitiva do tema visual escolhido pelo usuario ao reiniciar o aplicativo atraves de `inicializar_tema()` no ponto de entrada `TradutorLegendas26.py`.
+- Bloqueio de multiplexacao indevida quando o disjuntor de rede abre durante a traducao, descartando legendas incompletas e propagando codigo de erro para o CLI.
+
+---
+
 ## [2.9.0] - 2026-11-10
 
 ### Adicionado
