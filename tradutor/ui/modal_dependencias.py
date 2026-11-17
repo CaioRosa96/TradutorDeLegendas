@@ -34,7 +34,7 @@ class ModalDependencias(ctk.CTkToplevel):
     def _construir_interface(self):
         fonte_ui = CORES.get("fonte_ui", "Segoe UI")
         largura_borda = CORES.get("borda_largura", 1)
-        raio_card = CORES.get("raio_card", 6)
+        raio_card = CORES.get("raio_card", 2)
 
         self.lbl_subtitulo = ctk.CTkLabel(
             self,
@@ -65,8 +65,8 @@ class ModalDependencias(ctk.CTkToplevel):
 
         self.barra_progresso = ctk.CTkProgressBar(
             self,
-            height=8,
-            corner_radius=4,
+            height=4,
+            corner_radius=0,
             fg_color=CORES.get("progressbar_bg", CORES["bg_sidebar"]),
             progress_color=CORES["destaque_azul"],
         )
@@ -90,7 +90,7 @@ class ModalDependencias(ctk.CTkToplevel):
             font=(fonte_ui, 12, "bold"),
             fg_color=CORES["destaque_verde"],
             hover_color=CORES["destaque_verde_hover"],
-            text_color=CORES.get("btn_iniciar_txt", "#ffffff"),
+            text_color=CORES.get("btn_destaque_txt", "#ffffff"),
             corner_radius=raio_card,
             height=36,
             command=self._iniciar_download_automatico,

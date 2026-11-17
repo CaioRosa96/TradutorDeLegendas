@@ -15,8 +15,8 @@ class ModalGrimorio(ctk.CTkToplevel):
     def __init__(self, master):
         super().__init__(master)
         self.title(I18n.t("modal_grimorio_titulo"))
-        self.geometry("740x520")
-        self.minsize(680, 460)
+        self.geometry("720x500")
+        self.minsize(640, 420)
         self.configure(fg_color=CORES["bg_janela"])
         self.transient(master)
         self.after(50, self.focus)
@@ -31,17 +31,15 @@ class ModalGrimorio(ctk.CTkToplevel):
         self._glossarios.clear()
         pasta = GerenciadorConfig.garantir_estrutura_glossarios()
 
-        # 1. Glossario Global
         if os.path.exists(GerenciadorConfig.ARQUIVO_GLOSSARIO_PADRAO):
             termos = self._ler_termos_arquivo(GerenciadorConfig.ARQUIVO_GLOSSARIO_PADRAO)
             rotulo_global = I18n.t("grimorio_glossario_global")
             self._glossarios[rotulo_global] = {
                 "caminho": GerenciadorConfig.ARQUIVO_GLOSSARIO_PADRAO,
                 "termos": termos,
-                "tipo": "global"
+                "tipo": "global",
             }
 
-        # 2. Glossarios individuais por anime
         if os.path.exists(pasta):
             for nome in sorted(os.listdir(pasta)):
                 if nome.lower().endswith(".txt") and nome.lower() != "leia_me.txt":
@@ -51,7 +49,7 @@ class ModalGrimorio(ctk.CTkToplevel):
                     self._glossarios[nome_anime] = {
                         "caminho": caminho,
                         "termos": termos,
-                        "tipo": "anime"
+                        "tipo": "anime",
                     }
 
     def _ler_termos_arquivo(self, caminho: str) -> list:
@@ -63,55 +61,55 @@ class ModalGrimorio(ctk.CTkToplevel):
 
     def _construir_interface(self):
         largura_borda = CORES.get("borda_largura", 1)
-        raio_card = CORES.get("raio_card", 6)
+        raio_card = CORES.get("raio_card", 2)
         fonte_ui = CORES.get("fonte_ui", "Segoe UI")
 
-        # 1. Topo: Titulo, Busca e Botao de Abrir Pasta
         frame_topo = ctk.CTkFrame(
             self,
             fg_color=CORES["bg_sidebar"],
             border_color=CORES["borda_card"],
             border_width=largura_borda,
-            height=52,
-            corner_radius=0
+            height=40,
+            corner_radius=0,
         )
         frame_topo.pack(side="top", fill="x")
+        frame_topo.pack_propagate(False)
 
         lbl_tit = ctk.CTkLabel(
             frame_topo,
             text=I18n.t("grimorio_titulo_topo"),
-            font=(fonte_ui, 13, "bold"),
-            text_color=CORES["texto_principal"]
+            font=(fonte_ui, 12, "bold"),
+            text_color=CORES["texto_principal"],
         )
-        lbl_tit.pack(side="left", padx=16, pady=10)
+        lbl_tit.pack(side="left", padx=12, pady=6)
 
         btn_pasta = ctk.CTkButton(
             frame_topo,
             text=I18n.t("btn_abrir_explorer"),
-            font=(fonte_ui, 11, "bold"),
-            fg_color=CORES["destaque_azul"],
-            hover_color=CORES["destaque_azul_hover"],
-            text_color=CORES.get("btn_destaque_txt", "#ffffff"),
+            font=(fonte_ui, 11),
+            fg_color=CORES["bg_card"],
+            hover_color=CORES["bg_card_hover"],
+            border_color=CORES["borda_card"],
+            border_width=largura_borda,
+            text_color=CORES["texto_principal"],
             corner_radius=raio_card,
-            height=28,
-            command=self._abrir_pasta_explorer
+            height=24,
+            command=self._abrir_pasta_explorer,
         )
-        btn_pasta.pack(side="right", padx=16, pady=10)
+        btn_pasta.pack(side="right", padx=10, pady=6)
 
-        # 2. Container Central
         conteudo = ctk.CTkFrame(self, fg_color="transparent")
-        conteudo.pack(side="top", fill="both", expand=True, padx=14, pady=12)
+        conteudo.pack(side="top", fill="both", expand=True, padx=8, pady=8)
 
-        # Coluna Esquerda: Busca + Lista de Animes
         col_esq = ctk.CTkFrame(
             conteudo,
             fg_color=CORES["bg_sidebar"],
             border_color=CORES["borda_card"],
             border_width=largura_borda,
-            width=260,
-            corner_radius=raio_card
+            width=250,
+            corner_radius=raio_card,
         )
-        col_esq.pack(side="left", fill="y", padx=(0, 10))
+        col_esq.pack(side="left", fill="y", padx=(0, 8))
         col_esq.pack_propagate(False)
 
         self.txt_busca = ctk.CTkEntry(
@@ -124,21 +122,20 @@ class ModalGrimorio(ctk.CTkToplevel):
             placeholder_text_color=CORES["texto_secundario"],
             corner_radius=raio_card,
             font=(fonte_ui, 11),
-            height=30
+            height=26,
         )
-        self.txt_busca.pack(fill="x", padx=10, pady=(10, 8))
+        self.txt_busca.pack(fill="x", padx=6, pady=(6, 4))
         self.txt_busca.bind("<KeyRelease>", lambda e: self._filtrar_lista())
 
         self.scroll_animes = ctk.CTkScrollableFrame(col_esq, fg_color="transparent", corner_radius=raio_card)
-        self.scroll_animes.pack(fill="both", expand=True, padx=6, pady=(0, 8))
+        self.scroll_animes.pack(fill="both", expand=True, padx=4, pady=(0, 6))
 
-        # Coluna Direita: Termos do Anime Selecionado
         self.col_dir = ctk.CTkFrame(
             conteudo,
             fg_color=CORES["bg_sidebar"],
             border_color=CORES["borda_card"],
             border_width=largura_borda,
-            corner_radius=raio_card
+            corner_radius=raio_card,
         )
         self.col_dir.pack(side="left", fill="both", expand=True)
 
@@ -146,17 +143,17 @@ class ModalGrimorio(ctk.CTkToplevel):
             self.col_dir,
             text=I18n.t("grimorio_selecione_anime"),
             font=(fonte_ui, 12, "bold"),
-            text_color=CORES["texto_secundario"]
+            text_color=CORES["texto_secundario"],
         )
-        self.lbl_anime_atual.pack(anchor="w", padx=14, pady=(12, 4))
+        self.lbl_anime_atual.pack(anchor="w", padx=10, pady=(8, 2))
 
         self.lbl_badge_termos = ctk.CTkLabel(
             self.col_dir,
             text="",
-            font=(fonte_ui, 11, "bold"),
-            text_color=CORES["destaque_verde"]
+            font=("Consolas", 10),
+            text_color=CORES["texto_secundario"],
         )
-        self.lbl_badge_termos.pack(anchor="w", padx=14, pady=(0, 6))
+        self.lbl_badge_termos.pack(anchor="w", padx=10, pady=(0, 4))
 
         self.txt_termos = ctk.CTkTextbox(
             self.col_dir,
@@ -166,9 +163,9 @@ class ModalGrimorio(ctk.CTkToplevel):
             border_width=largura_borda,
             corner_radius=raio_card,
             text_color=CORES["texto_principal"],
-            wrap="none"
+            wrap="none",
         )
-        self.txt_termos.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        self.txt_termos.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
         self._renderizar_botoes_animes(list(self._glossarios.keys()))
         if self._glossarios:
@@ -177,7 +174,7 @@ class ModalGrimorio(ctk.CTkToplevel):
 
     def _renderizar_botoes_animes(self, lista_nomes: list):
         largura_borda = CORES.get("borda_largura", 1)
-        raio_card = CORES.get("raio_card", 6)
+        raio_card = CORES.get("raio_card", 2)
         fonte_ui = CORES.get("fonte_ui", "Segoe UI")
 
         for widget in self.scroll_animes.winfo_children():
@@ -188,7 +185,7 @@ class ModalGrimorio(ctk.CTkToplevel):
             qtd = len(dados["termos"])
             btn = ctk.CTkButton(
                 self.scroll_animes,
-                text=f"{nome} ({qtd})",
+                text=f"{nome} [{qtd}]",
                 anchor="w",
                 font=(fonte_ui, 11),
                 fg_color=CORES["bg_card"],
@@ -197,10 +194,10 @@ class ModalGrimorio(ctk.CTkToplevel):
                 border_width=largura_borda,
                 corner_radius=raio_card,
                 text_color=CORES["texto_principal"],
-                height=32,
-                command=lambda n=nome: self._selecionar_anime(n)
+                height=26,
+                command=lambda n=nome: self._selecionar_anime(n),
             )
-            btn.pack(fill="x", pady=2)
+            btn.pack(fill="x", pady=1)
 
     def _filtrar_lista(self):
         termo = self.txt_busca.get().strip().lower()
@@ -215,7 +212,7 @@ class ModalGrimorio(ctk.CTkToplevel):
         rotulo_anime = I18n.t("grimorio_anime_rotulo").format(nome)
         self.lbl_anime_atual.configure(
             text=rotulo_anime,
-            text_color=CORES["texto_principal"]
+            text_color=CORES["texto_principal"],
         )
         self.lbl_badge_termos.configure(
             text=I18n.t("grimorio_badge_termos").format(len(termos))

@@ -107,8 +107,23 @@ def test_identidade_visual_ms_dos_retro():
     assert ms_dos["borda_largura"] >= 2
     assert ms_dos["btn_destaque_txt"] == "#000000"
     assert ms_dos["destaque_azul"].lower() != ms_dos["destaque_verde"].lower(), (
-        "MS-DOS deve diferenciar destaque_azul (âmbar) de destaque_verde (fósforo verde)."
+        "MS-DOS deve diferenciar destaque_azul de destaque_verde (intensidades distintas do fósforo verde)."
     )
+
+
+def test_ms_dos_e_monocromatico_fosforo_verde_sem_ambar():
+    """
+    Regressão: monitores CRT de fósforo verde não emitiam âmbar. Todas as cores do tema
+    MS-DOS Retrô, exceto os tons de alerta (destaque_vermelho*), devem ter o canal verde dominante.
+    """
+    ms_dos = TEMAS["ms_dos"]
+    chaves_excecao = {"destaque_vermelho", "destaque_vermelho_hover"}
+    for chave, valor in ms_dos.items():
+        if chave in CHAVES_NAO_HEX or chave in chaves_excecao:
+            continue
+        r, g, b = (int(valor[i : i + 2], 16) for i in (1, 3, 5))
+        assert g >= r and g >= b, f"Cor fora do fósforo verde em ms_dos['{chave}']: {valor}"
+        assert r <= 0x40 and b <= 0x40, f"Cor com matiz não monocromático em ms_dos['{chave}']: {valor}"
 
 
 @pytest.mark.parametrize("nome_tema", TEMAS_ESPERADOS)

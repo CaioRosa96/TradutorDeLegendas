@@ -17,7 +17,7 @@ class PainelSeletorWhisper(ctk.CTkFrame):
 
     def __init__(self, master, ao_mudar_estado_cb=None, caminho_arquivo_padrao: str | None = None):
         largura_borda = CORES.get("borda_largura", 1)
-        raio_card = CORES.get("raio_card", 6)
+        raio_card = CORES.get("raio_card", 2)
         super().__init__(
             master,
             fg_color=CORES["bg_card"],
@@ -37,7 +37,7 @@ class PainelSeletorWhisper(ctk.CTkFrame):
 
     def _construir_widgets(self):
         fonte_ui = CORES.get("fonte_ui", "Segoe UI")
-        raio_card = CORES.get("raio_card", 6)
+        raio_card = CORES.get("raio_card", 2)
 
         frame_topo = ctk.CTkFrame(self, fg_color="transparent")
         frame_topo.pack(fill="x", padx=12, pady=(10, 4))
@@ -103,8 +103,8 @@ class PainelSeletorWhisper(ctk.CTkFrame):
 
         self.barra_progresso = ctk.CTkProgressBar(
             self,
-            height=6,
-            corner_radius=3,
+            height=4,
+            corner_radius=0,
             fg_color=CORES.get("progressbar_bg", CORES["bg_sidebar"]),
             progress_color=CORES["destaque_azul"],
         )
@@ -370,7 +370,7 @@ class ModalConfirmacaoWhisper(ctk.CTkToplevel):
 
     def _construir_interface(self, nome_arquivo: str):
         fonte_ui = CORES.get("fonte_ui", "Segoe UI")
-        raio_card = CORES.get("raio_card", 6)
+        raio_card = CORES.get("raio_card", 2)
 
         lbl_msg = ctk.CTkLabel(
             self,
@@ -414,7 +414,7 @@ class ModalConfirmacaoWhisper(ctk.CTkToplevel):
             font=(fonte_ui, 11, "bold"),
             fg_color=CORES["destaque_verde"],
             hover_color=CORES["destaque_azul_hover"],
-            text_color="#ffffff",
+            text_color=CORES.get("btn_destaque_txt", "#ffffff"),
             corner_radius=raio_card,
             width=220,
             height=34,
