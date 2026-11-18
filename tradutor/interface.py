@@ -79,23 +79,24 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
 
     @property
     def files(self) -> list[str]:
-        return self._gerenciador_fila._arquivos
+        return self._gerenciador_fila.arquivos
 
     @files.setter
     def files(self, valor: list[str]):
-        self._gerenciador_fila._arquivos = list(valor)
+        self._gerenciador_fila.limpar()
+        self._gerenciador_fila.adicionar_arquivos(valor)
 
     @property
     def _arquivos_sem_legenda(self) -> set[str]:
-        return self._gerenciador_fila._arquivos_sem_legenda
+        return self._gerenciador_fila.arquivos_sem_legenda
 
     @_arquivos_sem_legenda.setter
     def _arquivos_sem_legenda(self, valor: set[str]):
-        self._gerenciador_fila._arquivos_sem_legenda = set(valor)
+        self._gerenciador_fila.definir_arquivos_sem_legenda(valor)
 
     @property
     def _modelos_ia_por_arquivo(self) -> dict[str, str]:
-        return self._gerenciador_fila._modelos_ia_por_arquivo
+        return self._gerenciador_fila.modelos_ia_por_arquivo
 
     @property
     def _em_execucao(self) -> bool:
@@ -222,6 +223,8 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
             arq_atual = getattr(self._controller, "arquivo_atual", None)
             if arq_atual and os.path.abspath(arq_atual) == os.path.abspath(caminho):
                 return
+            if self._controller and hasattr(self._controller, "remover_arquivo_fila"):
+                self._controller.remover_arquivo_fila(caminho)
         if self._gerenciador_fila.remover_arquivo(caminho):
             self._sincronizar_fila()
 
@@ -250,7 +253,7 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
         def _ao_confirmar(autorizado: bool):
             if autorizado:
                 modelo_escolhido = PreferenciasUsuario.obter("modelo_whisper", "small")
-                self._modelos_ia_por_arquivo[caminho_arquivo] = modelo_escolhido
+                self._gerenciador_fila.definir_modelo_whisper(caminho_arquivo, modelo_escolhido)
                 self.fila.atualizar_status_ia(
                     self._arquivos_sem_legenda,
                     self._modelos_ia_por_arquivo,
@@ -384,15 +387,16 @@ class InterfaceGrafica(ctk.CTk, TkinterDnD.DnDWrapper if HAS_DND else object):
     def ask_whisper_permission(self, nome_arquivo: str) -> bool:
         """Exibe modal interativo de permissao, diagnostico de video e selecao/download de modelo da IA local Whisperfile."""
         caminho_completo = self._gerenciador_fila.resolver_caminho_por_nome(nome_arquivo)
-        if caminho_completo and caminho_completo in self._modelos_ia_por_arquivo:
-            PreferenciasUsuario.definir("modelo_whisper", self._modelos_ia_por_arquivo[caminho_completo])
+        modelo_gravado = self._gerenciador_fila.obter_modelo_whisper(caminho_completo) if caminho_completo else None
+        if modelo_gravado:
+            PreferenciasUsuario.definir("modelo_whisper", modelo_gravado)
             return True
 
         def _abrir_modal(responder):
             def _decidir(autorizado: bool):
                 if autorizado and caminho_completo:
                     modelo_escolhido = PreferenciasUsuario.obter("modelo_whisper", "small")
-                    self._modelos_ia_por_arquivo[caminho_completo] = modelo_escolhido
+                    self._gerenciador_fila.definir_modelo_whisper(caminho_completo, modelo_escolhido)
                     self.fila.atualizar_status_ia(
                         self._arquivos_sem_legenda,
                         self._modelos_ia_por_arquivo,

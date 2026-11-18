@@ -62,6 +62,12 @@ class ControladorApp:
         """Pede ao orquestrador para interromper a fila de traduções."""
         self._model.stop()
 
+    def remover_arquivo_fila(self, caminho: str) -> bool:
+        """Solicita ao modelo a remoção de um arquivo pendente da fila de execução."""
+        if hasattr(self._model, "remover_arquivo_fila"):
+            return self._model.remover_arquivo_fila(caminho)
+        return False
+
     def on_files_selected(self, files):
         """Varre arquivos de vídeo de forma assíncrona em busca de idiomas e trilhas de legenda."""
         import threading

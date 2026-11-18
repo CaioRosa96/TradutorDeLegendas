@@ -119,10 +119,10 @@ class TradutorTextosExtensos:
             async with semaforo:
                 if self._is_cancelled():
                     return bloco
-                traduzido = await self._executar_com_fallback(
+                traduzido, sucesso_total = await self._executar_com_fallback(
                     loop, bloco, src_norm, dest_norm
                 )
-                if traduzido != bloco:
+                if sucesso_total and not self._is_cancelled() and traduzido != bloco:
                     self._persistir_cache_unitario(bloco, src_norm, dest_norm, traduzido)
 
                 concluidos += 1
@@ -172,12 +172,17 @@ class TradutorTextosExtensos:
         bloco: str,
         src_lang: str,
         dest_lang: str,
-    ) -> str:
-        """Executa a tradução do bloco com fallback recursivo em caso de erro."""
+    ) -> tuple[str, bool]:
+        """Executa a tradução do bloco com fallback recursivo em caso de erro.
+
+        Retorna tupla (texto_traduzido, sucesso_total) onde sucesso_total indica se
+        todas as etapas e sub-blocos foram concluídos com sucesso sem falhas parciais.
+        """
         try:
-            return await loop.run_in_executor(
+            trad = await loop.run_in_executor(
                 None, self._tradutor.translate, bloco, src_lang, dest_lang
             )
+            return trad, True
         except ExcecaoDisjuntorAberto:
             raise
         except Exception as e:
@@ -185,15 +190,23 @@ class TradutorTextosExtensos:
                 f"[Aviso] Falha na tradução de bloco ({len(bloco)} chars): {e}. Executando fallback..."
             )
 
+        if self._is_cancelled():
+            return bloco, False
+
         # Fallback resiliente: divide pelo delimitador hierárquico mais significativo
         for sep in self._particionador._DELIMITADORES:
             if not sep:
-                break
+                continue
             if sep in bloco:
                 sub_blocos = [p for p in bloco.split(sep) if p]
                 if len(sub_blocos) > 1:
                     sub_traduzidos: list[str] = []
+                    falha_parcial = False
                     for sb in sub_blocos:
+                        if self._is_cancelled():
+                            falha_parcial = True
+                            sub_traduzidos.append(sb)
+                            continue
                         try:
                             trad_sb = await loop.run_in_executor(
                                 None, self._tradutor.translate, sb, src_lang, dest_lang
@@ -202,11 +215,13 @@ class TradutorTextosExtensos:
                         except ExcecaoDisjuntorAberto:
                             raise
                         except Exception:
+                            falha_parcial = True
                             sub_traduzidos.append(sb)
-                    return self._particionador.recompor_texto(bloco, sub_blocos, sub_traduzidos)
-                break
+                    recomposto = self._particionador.recompor_texto(bloco, sub_blocos, sub_traduzidos)
+                    sucesso_total = not falha_parcial and not self._is_cancelled()
+                    return recomposto, sucesso_total
 
-        return bloco
+        return bloco, False
 
     def traduzir_sincrono(
         self,

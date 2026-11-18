@@ -8,6 +8,7 @@ from .estrategias import FabricaProcessadores
 from .idiomas import Idiomas
 from .logger import app_logger
 from .tradutores import MotorTraducaoGoogle
+from .tradutores.base import ExcecaoDisjuntorAberto
 
 
 class OrquestradorTraducoes:
@@ -89,9 +90,10 @@ class OrquestradorTraducoes:
                 return False
             self._is_running = True
 
+        copia_fila = list(files) if files else []
         threading.Thread(
             target=self._process_files,
-            args=(files, idioma_origem, idioma_destino, manter_legenda),
+            args=(copia_fila, idioma_origem, idioma_destino, manter_legenda),
             daemon=True,
         ).start()
         return True
@@ -99,6 +101,17 @@ class OrquestradorTraducoes:
     def stop(self):
         """Sinaliza para interromper o processamento."""
         self._is_running = False
+
+    def remover_arquivo_fila(self, caminho: str) -> bool:
+        """Remove cooperativamente um arquivo pendente da fila de processamento em lote."""
+        with self._lock_execucao:
+            if hasattr(self, "_fila_trabalho") and self._fila_trabalho:
+                norm = os.path.abspath(caminho)
+                for item in list(self._fila_trabalho):
+                    if os.path.abspath(item) == norm:
+                        self._fila_trabalho.remove(item)
+                        return True
+        return False
 
     def _process_files(self, files, idioma_origem, idioma_destino, manter_legenda):
         """Loop principal de processamento em lote."""
@@ -110,31 +123,33 @@ class OrquestradorTraducoes:
         update_progress = self._callbacks.get('progress', lambda c, t: None)
         on_finish = self._callbacks.get('finish', lambda: None)
 
-        dest_norm = Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino)
-        if not dest_norm or dest_norm == "auto":
-            log(f"[ERRO CRÍTICO] Idioma de destino inválido ou não suportado: '{idioma_destino}'. Operação cancelada.")
-            on_finish()
-            return
-        idioma_destino = dest_norm
-
-        tempo_total_inicio = time.time()
-        fila_inicial = list(files)
-        total_arquivos = len(fila_inicial)
-        arquivos_sucesso = 0
-
-        log("=" * 60)
-        log(f"INICIANDO PROCESSAMENTO EM LOTE: {total_arquivos} arquivo(s)")
-        log("=" * 60)
-
-        engine_compartilhado = MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
-
         try:
+            dest_norm = Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino)
+            if not dest_norm or dest_norm == "auto":
+                log(f"[ERRO CRÍTICO] Idioma de destino inválido ou não suportado: '{idioma_destino}'. Operação cancelada.")
+                return
+            idioma_destino = dest_norm
+
+            tempo_total_inicio = time.time()
+            with self._lock_execucao:
+                self._fila_trabalho = list(files) if files else []
+            fila_inicial = list(self._fila_trabalho)
+            total_arquivos = len(fila_inicial)
+            arquivos_sucesso = 0
+
+            log("=" * 60)
+            log(f"INICIANDO PROCESSAMENTO EM LOTE: {total_arquivos} arquivo(s)")
+            log("=" * 60)
+
+            engine_compartilhado = MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
+
             for index, origem in enumerate(fila_inicial, 1):
                 if not self._is_running:
                     break
-                if isinstance(files, list) and origem not in files:
-                    log(f"\n--- Arquivo [{index}/{total_arquivos}]: {os.path.basename(origem)} (removido da fila, pulando) ---")
-                    continue
+                with self._lock_execucao:
+                    if origem not in self._fila_trabalho:
+                        log(f"\n--- Arquivo [{index}/{total_arquivos}]: {os.path.basename(origem)} (removido da fila, pulando) ---")
+                        continue
 
                 self.arquivo_em_processamento = origem
                 try:
@@ -159,7 +174,14 @@ class OrquestradorTraducoes:
                         log(f"-> Sucesso! Tempo gasto: {elapsed}s.")
                         arquivos_sucesso += 1
 
+                except ExcecaoDisjuntorAberto as e:
+                    log(f"[ERRO CRÍTICO] Disjuntor aberto durante {os.path.basename(origem)}: {e}. Interrompendo fila para evitar bloqueio.")
+                    break
                 except Exception as e:
+                    msg_err = str(e).lower()
+                    if "circuit breaker" in msg_err or "disjuntor" in msg_err:
+                        log(f"[ERRO CRÍTICO] Disjuntor aberto durante {os.path.basename(origem)}: {e}. Interrompendo fila para evitar bloqueio.")
+                        break
                     log(f"[ERRO CRÍTICO] Falha no arquivo {os.path.basename(origem)}: {e}")
                     continue
 
@@ -170,7 +192,8 @@ class OrquestradorTraducoes:
             log(f"Tempo Total Gasto: {tempo_total_gasto}s")
             log("=" * 60)
         finally:
-            self.arquivo_em_processamento = None
             with self._lock_execucao:
+                self.arquivo_em_processamento = None
                 self._is_running = False
+                self._fila_trabalho = []
             on_finish()
