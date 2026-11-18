@@ -198,38 +198,63 @@ def instalar_hooks_excecao(logger: logging.Logger):
     _hooks_instalados = True
 
 
+_logger_inicializado = False
+_lock_logger = threading.Lock()
+
+
 def setup_logger(
     diretorio_preferido: str | None = None,
     max_bytes: int = LIMITE_BYTES_ARQUIVO,
     dias_retencao: int = DIAS_RETENCAO,
 ) -> logging.Logger:
     """Configura o sistema de log estruturado com rotacao de 7 dias e teto de tamanho."""
-    log_dir = escolher_diretorio_logs(diretorio_preferido)
-    expurgar_logs_antigos(log_dir, dias_retencao=dias_retencao)
+    global _logger_inicializado
+    with _lock_logger:
+        logger = logging.getLogger("Tradutor")
+        logger.setLevel(logging.INFO)
 
-    filename = datetime.now().strftime("tradutor_%Y%m%d.log")
-    filepath = os.path.join(log_dir, filename)
+        if not any(isinstance(h, HandlerArquivoComTeto) for h in logger.handlers):
+            log_dir = escolher_diretorio_logs(diretorio_preferido)
+            expurgar_logs_antigos(log_dir, dias_retencao=dias_retencao)
 
-    logger = logging.getLogger("Tradutor")
-    logger.setLevel(logging.INFO)
+            filename = datetime.now().strftime("tradutor_%Y%m%d.log")
+            filepath = os.path.join(log_dir, filename)
 
-    if not logger.handlers:
-        formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
+            formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
 
-        fh = HandlerArquivoComTeto(filepath, max_bytes=max_bytes, encoding="utf-8")
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
+            fh = HandlerArquivoComTeto(filepath, max_bytes=max_bytes, encoding="utf-8")
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(formatter)
 
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.ERROR)
-        ch.setFormatter(formatter)
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.ERROR)
+            ch.setFormatter(formatter)
 
-        logger.addHandler(fh)
-        logger.addHandler(ch)
-        logger.info(gerar_cabecalho_sessao())
-        instalar_hooks_excecao(logger)
+            logger.addHandler(fh)
+            logger.addHandler(ch)
+            logger.info(gerar_cabecalho_sessao())
+            instalar_hooks_excecao(logger)
 
-    return logger
+        _logger_inicializado = True
+        return logger
 
 
-app_logger = setup_logger()
+class _LazyLogger:
+    """Proxy preguiçoso que adia a inicialização de I/O em disco e hooks até o primeiro uso de log."""
+
+    def __init__(self, name: str = "Tradutor"):
+        self._name = name
+        self._instancia: logging.Logger | None = None
+
+    def _obter_logger(self) -> logging.Logger:
+        if self._instancia is None:
+            if not _logger_inicializado:
+                setup_logger()
+            self._instancia = logging.getLogger(self._name)
+        return self._instancia
+
+    def __getattr__(self, item):
+        return getattr(self._obter_logger(), item)
+
+
+app_logger = _LazyLogger("Tradutor")

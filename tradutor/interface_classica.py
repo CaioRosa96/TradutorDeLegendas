@@ -2,6 +2,7 @@ import threading
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+from .i18n import I18n
 from .idiomas import Idiomas
 from .som import tocar_som_conclusao
 

@@ -219,7 +219,7 @@ class PainelSeletorWhisper(ctk.CTkFrame):
             caminho = filedialog.askopenfilename(
                 parent=self.winfo_toplevel(),
                 title=I18n.t("dialogo_selecionar_arquivos"),
-                filetypes=[(I18n.t("tipo_video_mkv"), "*.mkv *.mp4 *.avi *.mov *.webm")],
+                filetypes=[(I18n.t("tipo_video_mkv"), "*.mkv *.mp4 *.avi *.wmv *.webm")],
             )
         if caminho and os.path.isfile(caminho):
             self.executar_analise(caminho)
@@ -256,7 +256,7 @@ class PainelSeletorWhisper(ctk.CTkFrame):
         if len(nome_curto) > 28:
             nome_curto = nome_curto[:25] + "..."
         duracao_fmt = self._formatar_duracao(diag.duracao_segundos)
-        idioma_fmt = Idiomas.formatar_origem_mkv(diag.idioma_audio)
+        idioma_fmt = Idiomas.rotular_origem(diag.idioma_audio, I18n.obter_idioma())
         perfil_txt = (
             I18n.t("diag_perfil_musica")
             if diag.possui_fundo_musical
