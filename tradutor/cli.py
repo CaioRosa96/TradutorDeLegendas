@@ -11,6 +11,7 @@ from enum import IntEnum
 from typing import Optional, Sequence
 
 from .config import GerenciadorConfig
+from .config_usuario import PreferenciasUsuario
 from .estrategias.fabrica import FabricaProcessadores
 from .idiomas import Idiomas
 from .logger import app_logger
@@ -67,8 +68,15 @@ def construir_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--keep-external-sub", action="store_true", help="Mantem arquivo de legenda externo.")
     parser.add_argument("--enable-whisper", action="store_true", help="Ativa transcricao Whisperfile se sem legenda.")
+    parser.add_argument("--force-whisper", action="store_true", help="Forca transcricao via Whisperfile ignorando legendas embutidas.")
     parser.add_argument("-y", "--overwrite", action="store_true", help="Sobrescreve arquivos de saida sem perguntar.")
-    parser.add_argument("--json-output", action="store_true", help="Imprime JSON de resultado no stdout.")
+    parser.add_argument(
+        "--json-output",
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Imprime JSON de resultado no stdout.",
+    )
     return parser
 
 
@@ -76,6 +84,9 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
     """Ponto de entrada da execucao em modo headless."""
     parser = construir_parser()
     args = parser.parse_args(args_list)
+
+    if getattr(args, "force_whisper", False):
+        args.enable_whisper = True
 
     inicio_tempo = time.time()
     input_path = os.path.abspath(args.input)
@@ -99,6 +110,8 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
                 log(f"Erro: {resultado.error_message}")
             if resultado.output_video_path:
                 log(f"Video final: {resultado.output_video_path}")
+            if resultado.output_subtitle_path:
+                log(f"Legenda final: {resultado.output_subtitle_path}")
         return resultado.exit_code
 
     # 0. Sanitizacao e validacao antecipada dos parametros de idioma
@@ -229,6 +242,11 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
             log(f"[AVISO] Falha ao auto-alimentar glossario: {e}")
 
     # 6. Execucao do processador
+    orig_forcar = PreferenciasUsuario.obter("forcar_transcricao", False)
+    if getattr(args, "force_whisper", False):
+        PreferenciasUsuario.definir("forcar_transcricao", True)
+        args.enable_whisper = True
+
     try:
         processador = FabricaProcessadores.get_processor(
             input_path,
@@ -249,10 +267,13 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
         )
 
         elapsed = round(time.time() - inicio_tempo, 2)
+        raw_detected = getattr(processador, "ultimo_idioma_detectado", None)
+        detected_src = raw_detected if isinstance(raw_detected, str) and raw_detected else src_norm
         if sucesso:
-            caminhos = processador.get_output_paths(input_path, dest_norm, input_path)
+            ultimos = getattr(processador, "ultimos_caminhos_saida", None)
+            caminhos = ultimos if isinstance(ultimos, dict) and ultimos else processador.get_output_paths(input_path, dest_norm, input_path)
             out_video = caminhos.get("video")
-            out_sub = caminhos.get("legenda") if args.keep_external_sub else None
+            out_sub = caminhos.get("legenda") if (args.keep_external_sub or not is_video) else None
             used_whisper = bool(getattr(processador, "_transcrito_por_ia", False))
             return responder(
                 ResultadoExecucaoCli(
@@ -261,7 +282,7 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
                     input_path=input_path,
                     output_video_path=out_video,
                     output_subtitle_path=out_sub,
-                    source_lang_detected=src_norm,
+                    source_lang_detected=detected_src,
                     target_lang=dest_norm,
                     anime_title_used=args.anime_title,
                     glossary_terms_count=glossary_count,
@@ -278,7 +299,7 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
                     input_path=input_path,
                     output_video_path=None,
                     output_subtitle_path=None,
-                    source_lang_detected=src_norm,
+                    source_lang_detected=detected_src,
                     target_lang=dest_norm,
                     anime_title_used=args.anime_title,
                     glossary_terms_count=glossary_count,
@@ -330,3 +351,6 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
                 error_message=str(e),
             )
         )
+    finally:
+        if getattr(args, "force_whisper", False):
+            PreferenciasUsuario.definir("forcar_transcricao", orig_forcar)

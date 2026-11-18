@@ -169,3 +169,33 @@ def test_cli_disjuntor_aberto_retorna_codigo_3(tmp_path, capsys):
         payload = json.loads(captured.out.strip())
         assert payload["exit_code"] == 3
         assert payload["status"] == "ERRO_REDE_OU_DISJUNTOR"
+
+
+def test_cli_alias_json_e_force_whisper_e_source_lang_detected(tmp_path, capsys):
+    """Garante funcionamento do alias --json, da flag --force-whisper e propagacao de ultimo_idioma_detectado."""
+    mkv_fake = tmp_path / "video.mkv"
+    mkv_fake.write_bytes(b"dummy")
+
+    mock_proc = MagicMock()
+    mock_proc.process.return_value = True
+    mock_proc.ultimo_idioma_detectado = "jpn"
+    mock_proc.ultimos_caminhos_saida = {
+        "video": str(tmp_path / "video_PT.mkv"),
+        "legenda": None,
+    }
+    mock_proc.get_output_paths.return_value = mock_proc.ultimos_caminhos_saida
+
+    with patch("tradutor.estrategias.fabrica.FabricaProcessadores.get_processor", return_value=mock_proc), \
+         patch("tradutor.config.GerenciadorConfig.check_dependencies", return_value=True):
+        ret = executar_cli([
+            "--headless",
+            "-i", str(mkv_fake),
+            "-d", "pt",
+            "--force-whisper",
+            "--json",
+        ])
+        assert ret == CodigoSaidaCli.SUCESSO
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out.strip())
+        assert payload["source_lang_detected"] == "jpn"
+        assert payload["exit_code"] == 0
