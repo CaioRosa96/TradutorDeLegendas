@@ -4,6 +4,35 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 
 ---
 
+## [2.9.2] - 2026-11-18
+
+### Adicionado
+- Suite de 22 testes de regressao dedicados (`test_boost_regressoes.py`) para protecao contra vazamentos, condicoes de corrida e quebras de contratos.
+- Metodo thread-safe `remover_arquivo_fila` no `OrquestradorTraducoes`, sincronizado com o `ControladorApp` e acoes da interface grafica para cancelamento dinamico de itens pendentes na fila.
+- Suporte a `--force-whisper` e alias `--json` no CLI headless, com propagacao fiel do idioma de origem detectado (`source_lang_detected`).
+
+### Modificado
+- Integracao de `I18n.inicializar()` nos pontos de entrada principal e classico, respeitando a preferencia de idioma da interface salva no `preferencias.json`.
+- Restricao do seletor de arquivos de video no modal Whisper para extensoes suportadas pela fabrica (`.mkv`, `.mp4`, `.avi`, `.webm`, `.wmv`).
+- Alinhamento de limites hexagonais do `ProcessadorMkv`: checagem de binarios externos condicionada ao `AdaptadorMkvToolNixFFmpeg` e fallback restrito a legendas `.ass` e `.srt`.
+
+### Corrigido
+- Falha de `AttributeError` em `PainelSeletorWhisper._exibir_resultado_diagnostico` com a adocao de `Idiomas.rotular_origem`.
+- Falha de `NameError: name 'I18n' is not defined` em `InterfaceGrafica.perguntar_atualizacao` da interface classica.
+- Deadlock logico no `OrquestradorTraducoes` que mantinha `_is_running=True` permanentemente em caso de idioma de destino invalido ou `auto`.
+- Condicao invertida da diretiva `# Alias:` em `salvar_glossario_arquivo`, preservando aliases de videos com titulos curtos e associando aliases em `auto_alimentar` quando `anime_title` for fornecido.
+- Normalizacao de separadores (`-` e `_`) no casamento de titulos e aliases de glossarios locais.
+- Copia indevida de glossarios de producao para pastas temporarias de testes via `garantir_estrutura_glossarios`.
+- Fallback hierarquico e prevencao de gravacao de traducoes parciais/hibridas no cache SQLite em `TradutorTextosExtensos`.
+- Deadlock do subprocesso `whisperfile.exe` no Windows por esgotamento de buffers de pipe de 64 KB, substituido por redirecionamento via `TemporaryFile` e encerramento limpo via `taskkill`.
+- Ativacao de `PRAGMA synchronous=NORMAL` em todas as conexoes de trabalho do SQLite WAL em `CacheTraducoes`.
+- Condicao de corrida e escrita atomica segura com arquivos temporarios isolados por thread/processo em `PreferenciasUsuario`.
+- Vazamento de arquivos temporarios no cancelamento do `ProcessadorArquivoBase` e protecao contra exclusao acidental do arquivo de origem.
+- Falha de `WinError 3` no Windows ao processar arquivos no diretorio corrente (`os.makedirs('')`).
+- Falha de tipo em caminhos absolutos e objetos `Path` no AniList (`limpar_nome_anime`).
+
+---
+
 ## [2.9.1] - 2026-11-16
 
 ### Adicionado

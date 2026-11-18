@@ -11,12 +11,12 @@ from tradutor.i18n import I18n
 
 def test_contrato_info_versao_valores_e_formatadores():
     """Valida os valores base e os métodos auxiliares de formatação de InfoVersao."""
-    assert InfoVersao.NUMERO == "2.9.1"
+    assert InfoVersao.NUMERO == "2.9.2"
     assert InfoVersao.NOME_EDICAO == "Lossless Modern UI"
-    assert InfoVersao.tag() == "v2.9.1"
-    assert InfoVersao.completa() == "v2.9.1 (Lossless Modern UI)"
-    assert InfoVersao.titulo_janela("Tradutor") == "Tradutor — v2.9.1"
-    assert InfoVersao.formatar_rotulo_sobre("Versão {0}") == "Versão 2.9.1 (Lossless Modern UI)"
+    assert InfoVersao.tag() == "v2.9.2"
+    assert InfoVersao.completa() == "v2.9.2 (Lossless Modern UI)"
+    assert InfoVersao.titulo_janela("Tradutor") == "Tradutor — v2.9.2"
+    assert InfoVersao.formatar_rotulo_sobre("Versão {0}") == "Versão 2.9.2 (Lossless Modern UI)"
 
 
 def test_sincronizacao_consumidores_de_versao():

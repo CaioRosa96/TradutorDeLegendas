@@ -53,6 +53,9 @@ O projeto é estruturado segundo os princípios de separação de responsabilida
 - **Estratégias (`tradutor/estrategias/`):** Aplicação do Strategy e Template Method via `FabricaProcessadores`, delegando a lógica especializada para `ProcessadorMkv` ou `ProcessadorSrt`.
 - **Serviço de Tradução (`tradutor/servico_traducao.py`):** Motor assíncrono que abstrai provedores de tradução através da interface `ITradutor`.
 - **Transcritores (`tradutor/transcritores/`):** Módulo opt-in desacoplado sob o contrato `ITranscritor` com implementação `MotorWhisperfile` e diagnóstico acústico/hardware em `RecomendadorModeloWhisper`.
+- **Manipulação de Mídia (`tradutor/manipulador_midia.py`):** Porta `ManipuladorMidiaPort` desacoplada com adaptadores para `mkvmerge`, `mkvextract` e `ffmpeg`.
+- **Interface de Linha de Comando Headless (`tradutor/cli.py`):** Execução sem GUI via `--headless` com saídas em JSON (`--json` / `--json-output`), controle de transcrição (`--force-whisper`, `--enable-whisper`) e códigos de saída padronizados.
+- **Tradução de Textos Extensos (`tradutor/servico_textos_extensos.py`):** Particionamento hierárquico com orçamento dinâmico de caracteres e recomposição determinística.
 
 ---
 
@@ -89,7 +92,7 @@ python TradutorLegendas26.py
 
 ## Suíte de Testes e Qualidade
 
-O repositório possui cobertura de **181 testes unitários automatizados** com pytest, além de integração contínua (CI) e publicação automatizada de Releases via GitHub Actions.
+O repositório possui cobertura de **337 testes unitários automatizados** com pytest, além de integração contínua (CI) e publicação automatizada de Releases via GitHub Actions.
 
 ### Testes Unitários
 Os testes rodam de forma 100% offline, utilizando diretórios temporários e injeção de mocks:
