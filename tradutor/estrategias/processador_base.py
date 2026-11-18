@@ -37,6 +37,8 @@ class ProcessadorArquivoBase(ABC):
         self.ask_output_format = ask_output_format_cb
         self.ask_dependencies = ask_dependencies_cb
         self.output_dir = output_dir
+        self.ultimos_caminhos_saida: dict[str, str | None] = {}
+        self.ultimo_idioma_detectado: str | None = None
 
     def process(self, origem, idioma_origem, idioma_destino, manter_legenda) -> bool:
         """Executa o pipeline padrão para um arquivo."""
@@ -52,6 +54,7 @@ class ProcessadorArquivoBase(ABC):
         arq_trabalho, idioma_real = self.prepare(origem, idioma_origem)
         if not arq_trabalho:
             return False
+        self.ultimo_idioma_detectado = idioma_real
 
         # 2. Verificações de Idioma
         src_google = Idiomas.para_google(idioma_real)
@@ -71,6 +74,7 @@ class ProcessadorArquivoBase(ABC):
 
         # 3. Resolução de Caminhos de Saída
         caminhos_saida = self.get_output_paths(origem, idioma_destino, arq_trabalho)
+        self.ultimos_caminhos_saida = dict(caminhos_saida)
 
         # 4. Verificação de Conflitos (Arquivos Existentes)
         if not self._check_conflicts(caminhos_saida, arq_trabalho):
@@ -98,9 +102,20 @@ class ProcessadorArquivoBase(ABC):
                 if not sucesso_trad or not os.path.isfile(caminho_legenda_final):
                     self.log("[ERRO CRÍTICO] Tradução falhou ou arquivo final ausente. Abortando multiplexação.")
                     self.cleanup_temporary(arq_trabalho)
+                    if not manter_legenda and os.path.isfile(caminho_legenda_final) and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem):
+                        try:
+                            os.remove(caminho_legenda_final)
+                        except OSError:
+                            pass
                     return False
 
             if not self.is_running():
+                self.cleanup_temporary(arq_trabalho)
+                if not manter_legenda and os.path.isfile(caminho_legenda_final) and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem):
+                    try:
+                        os.remove(caminho_legenda_final)
+                    except OSError:
+                        pass
                 return False
 
             # 6. Finalização (Muxing MKV ou Conclusão SRT)
@@ -109,6 +124,16 @@ class ProcessadorArquivoBase(ABC):
 
         except Exception as e:
             self.cleanup_temporary(arq_trabalho)
+            if (
+                not manter_legenda
+                and 'caminho_legenda_final' in locals()
+                and os.path.isfile(caminho_legenda_final)
+                and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem)
+            ):
+                try:
+                    os.remove(caminho_legenda_final)
+                except OSError:
+                    pass
             raise e
 
     def _check_conflicts(self, caminhos_saida: dict, arq_trabalho: str) -> bool:

@@ -1,6 +1,7 @@
 """Contratos abstratos e objetos de valor para motores de transcrição de áudio (ASR)."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -31,7 +32,12 @@ class ITranscritor(ABC):
         pass
 
     @abstractmethod
-    def transcrever(self, caminho_audio: str, idioma: str = "auto") -> ResultadoTranscricao:
+    def transcrever(
+        self,
+        caminho_audio: str,
+        idioma: str = "auto",
+        cancelado_cb: Callable[[], bool] | None = None,
+    ) -> ResultadoTranscricao:
         """Transcreve um arquivo de áudio e retorna os metadados do .srt gerado."""
         pass
 

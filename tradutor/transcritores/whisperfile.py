@@ -3,7 +3,9 @@
 import os
 import shutil
 import subprocess
+import tempfile
 import time
+from collections.abc import Callable
 
 from ..config import GerenciadorConfig
 from ..idiomas import Idiomas
@@ -98,7 +100,32 @@ class MotorWhisperfile(ITranscritor):
             return "zh"
         return cod
 
-    def transcrever(self, caminho_audio: str, idioma: str = "auto") -> ResultadoTranscricao:
+    @staticmethod
+    def _encerrar_processo(proc: subprocess.Popen) -> None:
+        """Encerra a árvore de processos de forma limpa para evitar órfãos no Windows."""
+        try:
+            if proc.poll() is not None:
+                return
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            else:
+                proc.kill()
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def transcrever(
+        self,
+        caminho_audio: str,
+        idioma: str = "auto",
+        cancelado_cb: Callable[[], bool] | None = None,
+    ) -> ResultadoTranscricao:
         """Executa o Whisperfile sobre o arquivo de áudio e gera um arquivo .srt sincronizado."""
         exe = self.resolver_executavel()
         if not exe:
@@ -111,21 +138,58 @@ class MotorWhisperfile(ITranscritor):
         comando = [exe, "-f", caminho_audio, "-osrt", "-l", idioma_norm, "-mc", "0"]
 
         inicio = time.time()
-        resultado = subprocess.run(
-            comando,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="ignore",
-            check=False,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            timeout=self._timeout_segundos,
-        )
+        if cancelado_cb is not None:
+            with tempfile.TemporaryFile(mode="w+t", encoding="utf-8", errors="ignore") as out_f, \
+                 tempfile.TemporaryFile(mode="w+t", encoding="utf-8", errors="ignore") as err_f:
+                proc = subprocess.Popen(
+                    comando,
+                    stdout=out_f,
+                    stderr=err_f,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
+                try:
+                    while proc.poll() is None:
+                        if cancelado_cb():
+                            raise RuntimeError("Transcrição via Whisperfile cancelada pelo usuário.")
+
+                        if (time.time() - inicio) > self._timeout_segundos:
+                            raise subprocess.TimeoutExpired(comando, self._timeout_segundos)
+
+                        time.sleep(0.1)
+
+                    retcode = proc.returncode
+                    try:
+                        out_f.seek(0)
+                        stdout = out_f.read()
+                    except Exception:
+                        stdout = ""
+                    try:
+                        err_f.seek(0)
+                        stderr = err_f.read()
+                    except Exception:
+                        stderr = ""
+                except Exception:
+                    self._encerrar_processo(proc)
+                    raise
+        else:
+            resultado_run = subprocess.run(
+                comando,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                timeout=self._timeout_segundos,
+            )
+            retcode = resultado_run.returncode
+            stdout, stderr = resultado_run.stdout, resultado_run.stderr
+
         duracao = round(time.time() - inicio, 2)
 
-        if resultado.returncode != 0:
-            detalhe = (resultado.stderr or resultado.stdout or "").strip()
-            raise RuntimeError(f"Falha na transcrição via Whisperfile (código {resultado.returncode}): {detalhe}")
+        if retcode != 0:
+            detalhe = (stderr or stdout or "").strip()
+            raise RuntimeError(f"Falha na transcrição via Whisperfile (código {retcode}): {detalhe}")
 
         caminho_srt = f"{caminho_audio}.srt"
         if not os.path.exists(caminho_srt):

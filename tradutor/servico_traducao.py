@@ -69,6 +69,8 @@ class ServicoTraducao:
 
     def _salvar_cache_seguro(self, texto: str, src_lang: str, dest_lang: str, traducao: str) -> None:
         """Persiste uma tradução unitária no cache em modo best-effort sem abortar o lote."""
+        if "TKGLOSS" in texto or "TKGLOSS" in traducao:
+            return
         try:
             self._cache.put(texto, src_lang, dest_lang, traducao)
         except Exception as e:
@@ -78,8 +80,14 @@ class ServicoTraducao:
         """Persiste múltiplas traduções no cache em modo best-effort sem reverter legendas."""
         if not itens or not hasattr(self._cache, "put_many"):
             return
+        itens_limpos = {
+            k: v for k, v in itens.items()
+            if "TKGLOSS" not in k and "TKGLOSS" not in v
+        }
+        if not itens_limpos:
+            return
         try:
-            self._cache.put_many(itens, src_lang, dest_lang)
+            self._cache.put_many(itens_limpos, src_lang, dest_lang)
         except Exception as e:
             self._logger(f"[Aviso] Falha ao gravar lote no cache local (ignorada): {e}")
 
@@ -169,8 +177,9 @@ class ServicoTraducao:
 
                     # 2. Se não existir, vai na Rede via Engine injetada
                     traduzido = await loop.run_in_executor(executor, self._engine.translate, bloco_protegido, src_lang, dest_lang)
-                    # 3. Salva no Cache (best-effort)
-                    self._salvar_cache_seguro(bloco_protegido, src_lang, dest_lang, traduzido)
+                    # 3. Salva no Cache (best-effort se não contiver tokens sintetizados)
+                    if not payload_bloco.possui_tokens:
+                        self._salvar_cache_seguro(bloco_protegido, src_lang, dest_lang, traduzido)
                     
                 traduzido_restaurado = self._glossary.restaurar(traduzido, payload_bloco)
                 
@@ -218,7 +227,8 @@ class ServicoTraducao:
                             except Exception:
                                 subs[idx].text = self._limpar_quebras(texto)
                                 continue
-                            self._salvar_cache_seguro(texto_protegido, src_lang, dest_lang, r)
+                            if not payload_linha.possui_tokens:
+                                self._salvar_cache_seguro(texto_protegido, src_lang, dest_lang, r)
 
                         r_restaurado = self._glossary.restaurar(r, payload_linha)
                         subs[idx].text = self._limpar_quebras(r_restaurado)

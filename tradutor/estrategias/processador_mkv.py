@@ -37,11 +37,8 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         trilhas = self._manipulador_midia.listar_trilhas(origem)
         trilhas_sub = [
             t for t in trilhas
-            if t.tipo == "subtitles" and (t.formato in (".ass", ".srt") or not t.formato)
+            if t.tipo == "subtitles" and t.formato in (".ass", ".srt")
         ]
-        if not trilhas_sub:
-            trilhas_sub = [t for t in trilhas if t.tipo == "subtitles"]
-
         if not trilhas_sub:
             raise ValueError("Nenhuma legenda (.ass ou .srt) encontrada neste vídeo.")
 
@@ -69,7 +66,10 @@ class ProcessadorMkv(ProcessadorArquivoBase):
 
     def prepare(self, origem, idioma_origem):
         self._transcrito_por_ia = False
-        if not GerenciadorConfig.check_dependencies():
+        if (
+            isinstance(self._manipulador_midia, AdaptadorMkvToolNixFFmpeg)
+            and not GerenciadorConfig.check_dependencies()
+        ):
             if self.ask_dependencies is not None:
                 self.log("[AVISO] MKVToolNix não encontrado. Aguardando configuração pelo usuário...")
                 if not self.ask_dependencies():
@@ -80,7 +80,8 @@ class ProcessadorMkv(ProcessadorArquivoBase):
                 return None, None
 
         destino_dir = self.output_dir or os.path.dirname(origem)
-        os.makedirs(destino_dir, exist_ok=True)
+        if destino_dir:
+            os.makedirs(destino_dir, exist_ok=True)
         forcar_whisper = bool(PreferenciasUsuario.obter("forcar_transcricao", False))
 
         if not forcar_whisper:
@@ -129,7 +130,11 @@ class ProcessadorMkv(ProcessadorArquivoBase):
 
         try:
             self.log(f"Transcrevendo áudio via Whisperfile (Idioma: {idioma_efetivo or 'auto'})...")
-            resultado = motor_whisper.transcrever(caminho_audio, idioma=idioma_efetivo)
+            resultado = motor_whisper.transcrever(
+                caminho_audio,
+                idioma=idioma_efetivo,
+                cancelado_cb=lambda: not self.is_running(),
+            )
             nome_base = os.path.basename(origem).rsplit(".", 1)[0]
             caminho_srt_original = os.path.join(destino_dir, f"{nome_base}_ORIGINAL.srt")
 
@@ -168,9 +173,12 @@ class ProcessadorMkv(ProcessadorArquivoBase):
 
     def get_output_paths(self, origem, idioma_destino, arq_trabalho) -> dict:
         destino_dir = self.output_dir or os.path.dirname(origem)
-        os.makedirs(destino_dir, exist_ok=True)
+        if destino_dir:
+            os.makedirs(destino_dir, exist_ok=True)
         nome_base = os.path.basename(arq_trabalho)
-        extensao = nome_base.rsplit('.', 1)[-1]
+        extensao = nome_base.rsplit('.', 1)[-1].lower()
+        if extensao in ("mkv", "mp4", "webm", "avi", "wmv"):
+            extensao = "srt"
         nome_sem_ext = nome_base.rsplit('.', 1)[0].replace("_ORIGINAL", "")
         ext_video = os.path.splitext(origem)[1].lower() or ".mkv"
         sufixo = (Idiomas.normalizar_destino(idioma_destino) or Idiomas.para_google(idioma_destino) or "pt").upper()

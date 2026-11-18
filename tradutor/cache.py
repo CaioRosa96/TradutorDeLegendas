@@ -30,6 +30,7 @@ class CacheTraducoes:
         """Retorna uma conexão SQLite configurada com timeout estendido para alta concorrência."""
         conn = sqlite3.connect(self.db_path, timeout=self.TIMEOUT_SEGUNDOS, check_same_thread=False)
         conn.execute("PRAGMA busy_timeout=30000;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         return conn
 
     def _init_db(self):

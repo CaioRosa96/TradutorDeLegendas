@@ -18,7 +18,8 @@ class ProcessadorSrt(ProcessadorArquivoBase):
 
     def get_output_paths(self, origem, idioma_destino, arq_trabalho) -> dict:
         destino_dir = self.output_dir or os.path.dirname(origem)
-        os.makedirs(destino_dir, exist_ok=True)
+        if destino_dir:
+            os.makedirs(destino_dir, exist_ok=True)
         nome_base = os.path.basename(origem)
         extensao = nome_base.rsplit('.', 1)[-1]
         nome_sem_ext = nome_base.rsplit('.', 1)[0]
