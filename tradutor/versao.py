@@ -12,7 +12,7 @@ class InfoVersao:
     Logger, Verificador de Atualizações e sistema de internacionalização (i18n).
     """
 
-    NUMERO: Final[str] = "2.9.2"
+    NUMERO: Final[str] = "2.9.3"
     NOME_EDICAO: Final[str] = "Lossless Modern UI"
 
     @classmethod

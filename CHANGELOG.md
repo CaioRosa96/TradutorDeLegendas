@@ -4,6 +4,28 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 
 ---
 
+## [2.9.3] - 2026-11-18
+
+### Adicionado
+- Suite de testes de regressão cobrindo orçamento de caracteres, integridade de cancelamento com preservação de legendas pré-existentes, sonda única Half-Open e cache unificado.
+- Proteção anti-exclusão acidental (`_limpar_legenda_intermediaria`) que preserva arquivos de legenda pré-existentes do usuário quando a operação é cancelada ou falha.
+- Propriedade pública `delimitadores` em `ParticionadorTexto` e método gancho `deve_copiar_sem_traduzir()` em `ProcessadorArquivoBase`.
+
+### Modificado
+- Fatiamento de lotes com duplo critério no `ServicoTraducao` respeitando simultaneamente limite de linhas e teto de caracteres (`3500 chars`).
+- Escrita de arquivo de legenda traduzido promovida via gravação temporária atômica (`os.replace`) com preservação de extensão.
+- Controle de concorrência no `MotorTraducaoGoogle`: sonda única em estado Half-Open sob lock para evitar Thundering Herd de threads simultâneas.
+- Otimização do fallback em lote no `ServicoTraducao`: isolamento de linhas pendentes em acertos parciais e eliminação de pausas desnecessárias em hits de cache.
+- Otimização de performance de CPU no `GerenciadorGlossario`: unificação e pré-compilação de expressão regular combinada para termos de glossário com restauração em passagem única.
+- Otimização de consultas no `TradutorTextosExtensos`: eliminação de leituras SQLite redundantes após hit no cache em lote.
+- Desacoplamento tardio (*lazy import*) de portas de mídia em `contratos.py` via `__getattr__`.
+
+### Corrigido
+- Formatação de espaços residuais no escudo de tags ao redor de marcações HTML/ASS e antes de pontuações de fim de sentença.
+- Anexação de pontuação de fechamento ao bloco particionado em `ParticionadorTexto`.
+
+---
+
 ## [2.9.2] - 2026-11-18
 
 ### Adicionado
