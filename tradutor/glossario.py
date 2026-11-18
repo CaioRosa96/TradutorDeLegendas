@@ -58,6 +58,7 @@ class GerenciadorGlossario:
 
     def load(self):
         """Carrega os termos do arquivo de glossário global e específicos."""
+        GerenciadorConfig.garantir_estrutura_glossarios(self.filepath)
         if not os.path.exists(self.filepath):
             # Cria um arquivo de exemplo se não existir
             try:
@@ -88,13 +89,16 @@ class GerenciadorGlossario:
                 
         encontrou_especifico = False
         if self.video_filename and os.path.exists(dir_especificos):
-            video_name_lower = self.video_filename.lower()
+            video_name_norm = self.video_filename.lower().replace('_', ' ').replace('-', ' ')
             for arquivo in os.listdir(dir_especificos):
                 if arquivo.lower().endswith(".txt") and arquivo.lower() != "leia_me.txt":
                     caminho_especifico = os.path.join(dir_especificos, arquivo)
-                    nome_anime = arquivo[:-4].lower()  # remove .txt
-                    aliases = self._extrair_aliases_arquivo(caminho_especifico)
-                    if nome_anime in video_name_lower or any(alias in video_name_lower for alias in aliases):
+                    nome_anime = arquivo[:-4].lower().replace('_', ' ').replace('-', ' ')
+                    aliases = [
+                        a.replace('_', ' ').replace('-', ' ')
+                        for a in self._extrair_aliases_arquivo(caminho_especifico)
+                    ]
+                    if nome_anime in video_name_norm or any(alias in video_name_norm for alias in aliases):
                         self._load_file(caminho_especifico)
                         encontrou_especifico = True
             

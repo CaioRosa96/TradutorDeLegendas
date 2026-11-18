@@ -5,12 +5,11 @@ import os
 from typing import Mapping, Protocol, Sequence, runtime_checkable
 
 from .anilist import (
-    _atualizar_glossario_existente,
     buscar_anime,
     buscar_personagens,
     extrair_nomes_ordenados,
     limpar_nome_anime,
-    sanitizar_nome_arquivo,
+    salvar_glossario_arquivo,
 )
 
 
@@ -78,22 +77,13 @@ class AdaptadorAniListGraphQL(BuscadorEntidadesPort):
                 try:
                     titulo_info = anime.get("title", {})
                     titulo = titulo_info.get("romaji") or titulo_info.get("english") or nome_limpo
-                    nome_arquivo = sanitizar_nome_arquivo(titulo) or f"Anime_{anime_id}"
-                    os.makedirs(self.pasta_destino, exist_ok=True)
-                    caminho_arquivo = os.path.join(self.pasta_destino, f"{nome_arquivo}.txt")
-                    alias_candidato = nome_limpo if nome_limpo.lower() not in nome_arquivo.lower() else None
-
-                    if os.path.isfile(caminho_arquivo):
-                        _atualizar_glossario_existente(caminho_arquivo, nomes, alias_candidato)
-                    else:
-                        with open(caminho_arquivo, "w", encoding="utf-8") as f:
-                            f.write(f"# --- {titulo} ---\n")
-                            if alias_candidato:
-                                f.write(f"# Alias: {alias_candidato}\n")
-                            f.write("# Personagens extraídos via auto_alimentar\n\n")
-                            for nome in nomes:
-                                if nome:
-                                    f.write(f"{nome}\n")
+                    salvar_glossario_arquivo(
+                        pasta_destino=self.pasta_destino,
+                        titulo=titulo,
+                        anime_id=anime_id,
+                        nome_limpo=nome_limpo,
+                        nomes=nomes,
+                    )
                 except Exception:
                     pass
 
@@ -139,13 +129,16 @@ class AdaptadorMemoriaGlossario(BuscadorEntidadesPort):
         if not titulo_obra:
             return list(self._termos_diretos)
 
-        titulo_limpo = titulo_obra.strip().lower()
-
-        if titulo_limpo in self._mapa_obras:
-            return list(self._mapa_obras[titulo_limpo])
+        titulo_limpo = titulo_obra.strip().lower().replace('_', ' ').replace('-', ' ')
 
         for chave, termos in self._mapa_obras.items():
-            if chave in titulo_limpo or titulo_limpo in chave:
+            chave_norm = chave.replace('_', ' ').replace('-', ' ')
+            if chave_norm == titulo_limpo:
+                return list(termos)
+
+        for chave, termos in self._mapa_obras.items():
+            chave_norm = chave.replace('_', ' ').replace('-', ' ')
+            if chave_norm in titulo_limpo or titulo_limpo in chave_norm:
                 return list(termos)
 
         if self._termos_diretos:

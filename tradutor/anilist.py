@@ -72,7 +72,10 @@ def buscar_personagens(anime_id):
 
 def limpar_nome_anime(nome_arquivo):
     """Limpa tags de release, grupos, extensões e números de episódio do nome do arquivo."""
-    nome = nome_arquivo.rsplit('.', 1)[0]
+    caminho_str = os.fspath(nome_arquivo) if not isinstance(nome_arquivo, str) else nome_arquivo
+    caminho_str = caminho_str.strip().rstrip("/\\")
+    base = os.path.basename(caminho_str.replace('\\', '/'))
+    nome = base.rsplit('.', 1)[0]
     # Remove tags em colchetes ou parênteses [SubsPlease], (1080p)
     nome = re.sub(r'\[.*?\]|\(.*?\)', '', nome)
     # Remove marcadores no formato S02E07, - S01E03, _S02E12
@@ -112,12 +115,45 @@ def sanitizar_nome_arquivo(nome):
     return limpo or "Anime_Desconhecido"
 
 
+def salvar_glossario_arquivo(
+    pasta_destino: str,
+    titulo: str,
+    anime_id: int | str,
+    nome_limpo: str,
+    nomes: list[str],
+) -> str | None:
+    """Persiste ou atualiza arquivo de glossário local com nomes extraídos e alias."""
+    if not nomes:
+        return None
+    nome_arquivo = sanitizar_nome_arquivo(titulo) or f"Anime_{anime_id}"
+    if pasta_destino:
+        os.makedirs(pasta_destino, exist_ok=True)
+
+    caminho_arquivo = os.path.join(pasta_destino or "", f"{nome_arquivo}.txt")
+    alias_candidato = nome_limpo if (nome_limpo and nome_arquivo.lower() not in nome_limpo.lower()) else None
+
+    if os.path.isfile(caminho_arquivo):
+        _atualizar_glossario_existente(caminho_arquivo, nomes, alias_candidato)
+    else:
+        with open(caminho_arquivo, "w", encoding="utf-8") as f:
+            f.write(f"# --- {titulo} ---\n")
+            if alias_candidato:
+                f.write(f"# Alias: {alias_candidato}\n")
+            f.write("# Personagens extraídos via auto_alimentar\n\n")
+            for nome in nomes:
+                if nome:
+                    f.write(f"{nome}\n")
+
+    return caminho_arquivo
+
+
 def auto_alimentar(nome_video, pasta_destino=None, anime_title=None, anilist_id=None):
     """Busca silenciosa do anime e cria o arquivo de glossário com nomes de personagens."""
+    alias_video = limpar_nome_anime(nome_video) if nome_video else ""
     if anime_title:
         nome_limpo = anime_title.strip()
     else:
-        nome_limpo = limpar_nome_anime(nome_video)
+        nome_limpo = alias_video
 
     if not nome_limpo and anilist_id is None:
         return None
@@ -134,32 +170,20 @@ def auto_alimentar(nome_video, pasta_destino=None, anime_title=None, anilist_id=
         titulo_info = anime.get('title', {})
         titulo = anime_title or titulo_info.get('romaji') or titulo_info.get('english') or nome_limpo
 
-    nome_arquivo = sanitizar_nome_arquivo(titulo) or f"Anime_{anime_id}"
     personagens = buscar_personagens(anime_id)
     if not personagens:
         return None
 
     lista_ordenada = extrair_nomes_ordenados(personagens)
-
     destino_dir = pasta_destino or GerenciadorConfig.DIRETORIO_GLOSSARIOS
-    os.makedirs(destino_dir, exist_ok=True)
 
-    caminho_arquivo = os.path.join(destino_dir, f"{nome_arquivo}.txt")
-    alias_candidato = nome_limpo if nome_limpo.lower() not in nome_arquivo.lower() else None
-
-    if os.path.isfile(caminho_arquivo):
-        _atualizar_glossario_existente(caminho_arquivo, lista_ordenada, alias_candidato)
-    else:
-        with open(caminho_arquivo, "w", encoding="utf-8") as f:
-            f.write(f"# --- {titulo} ---\n")
-            if alias_candidato:
-                f.write(f"# Alias: {alias_candidato}\n")
-            f.write("# Personagens extraídos via auto_alimentar\n\n")
-            for nome in lista_ordenada:
-                if nome:
-                    f.write(f"{nome}\n")
-
-    return caminho_arquivo
+    return salvar_glossario_arquivo(
+        pasta_destino=destino_dir,
+        titulo=titulo,
+        anime_id=anime_id,
+        nome_limpo=alias_video or nome_limpo,
+        nomes=lista_ordenada,
+    )
 
 
 def _atualizar_glossario_existente(

@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+from .config_usuario import PreferenciasUsuario
 
 
 class GerenciadorConfig:
@@ -49,11 +50,17 @@ class GerenciadorConfig:
             pass
 
         # 1. Inicializa ou copia o glossário global
+        copiar_de_recursos = (
+            getattr(sys, "frozen", False)
+            or os.path.abspath(cls.DIRETORIO_RECURSOS) != os.path.abspath(cls.DIRETORIO_EXECUCAO)
+        )
+
         if not os.path.isfile(arq_global):
             origem_recurso_global = os.path.join(cls.DIRETORIO_RECURSOS, "glossario.txt")
             try:
                 if (
-                    os.path.isfile(origem_recurso_global)
+                    copiar_de_recursos
+                    and os.path.isfile(origem_recurso_global)
                     and os.path.abspath(origem_recurso_global) != os.path.abspath(arq_global)
                 ):
                     shutil.copy2(origem_recurso_global, arq_global)
@@ -74,7 +81,8 @@ class GerenciadorConfig:
         pasta_recurso_gloss = os.path.join(cls.DIRETORIO_RECURSOS, "glossarios")
         try:
             if (
-                os.path.isdir(pasta_recurso_gloss)
+                copiar_de_recursos
+                and os.path.isdir(pasta_recurso_gloss)
                 and os.path.abspath(pasta_recurso_gloss) != os.path.abspath(pasta_destino)
             ):
                 for nome in os.listdir(pasta_recurso_gloss):
@@ -126,8 +134,6 @@ class GerenciadorConfig:
     def get_mkvtoolnix_path(cls) -> str:
         """Retorna o caminho do MKVToolNix priorizando: pasta customizada do usuário, pasta local e sistema."""
         try:
-            from .config_usuario import PreferenciasUsuario
-
             custom_path = PreferenciasUsuario.obter("mkvtoolnix_custom", "")
             resolvido_custom = cls.validar_pasta_mkvtoolnix(custom_path)
             if resolvido_custom:
@@ -171,8 +177,6 @@ class GerenciadorConfig:
         """Localiza o executável ffmpeg priorizando pasta customizada, pasta local e PATH do sistema."""
         pastas_custom = []
         try:
-            from .config_usuario import PreferenciasUsuario
-
             for chave in ("ffmpeg_custom", "mkvtoolnix_custom"):
                 val = PreferenciasUsuario.obter(chave, "")
                 if val:
