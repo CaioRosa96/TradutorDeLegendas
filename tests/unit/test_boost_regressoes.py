@@ -198,14 +198,12 @@ def test_regressao_cancelamento_limpa_arquivos_temporarios_processador_base(tmp_
         f.write("1\n00:00:00,000 --> 00:00:01,000\nHello\n")
 
     final_sub = str(tmp_path / "teste_PT.srt")
-    with open(final_sub, "w", encoding="utf-8") as f:
-        f.write("1\n00:00:00,000 --> 00:00:01,000\nOlá\n")
-
-    rodando = [True]
 
     def _is_running():
-        # Cancela logo após a tradução
-        return rodando[0]
+        # Cancela logo após a tradução quando a legenda temporária da execução foi salva
+        if os.path.exists(final_sub):
+            return False
+        return True
 
     proc = DummyProcessador(
         log_cb=lambda _: None,
@@ -221,9 +219,6 @@ def test_regressao_cancelamento_limpa_arquivos_temporarios_processador_base(tmp_
     mock_engine.translate.return_value = "Olá"
     proc.engine = mock_engine
 
-    # Interrompe durante a execução
-    rodando[0] = False
-
     resultado = proc.process(
         origem=str(tmp_path / "video.mkv"),
         idioma_origem="en",
@@ -235,6 +230,46 @@ def test_regressao_cancelamento_limpa_arquivos_temporarios_processador_base(tmp_
     assert proc.cleanup_chamado is True
     assert not os.path.exists(temp_orig)
     assert not os.path.exists(final_sub)
+
+
+def test_regressao_cancelamento_preserva_legenda_preexistente(tmp_path, mocker):
+    """Garante que cancelamento antes da gravação NÃO apaga legenda preexistente no destino."""
+    mocker.patch("tradutor.glossario_port.AdaptadorAniListGraphQL.buscar_nomes_proprios", return_value=[])
+    temp_orig = str(tmp_path / "teste_ORIGINAL.srt")
+    with open(temp_orig, "w", encoding="utf-8") as f:
+        f.write("1\n00:00:00,000 --> 00:00:01,000\nHello\n")
+
+    final_sub = str(tmp_path / "teste_PT.srt")
+    with open(final_sub, "w", encoding="utf-8") as f:
+        f.write("Legenda preexistente do usuario intocada")
+
+    proc = DummyProcessador(
+        log_cb=lambda _: None,
+        progress_cb=lambda *_: None,
+        ask_overwrite_cb=lambda _: True,
+        is_running_cb=lambda: False,  # Cancela antes de iniciar a tradução
+    )
+    proc._temp_sub = temp_orig
+    proc._final_sub = final_sub
+    proc.cleanup_chamado = False
+
+    mock_engine = MagicMock()
+    proc.engine = mock_engine
+
+    resultado = proc.process(
+        origem=str(tmp_path / "video.mkv"),
+        idioma_origem="en",
+        idioma_destino="pt",
+        manter_legenda=False,
+    )
+
+    assert resultado is False
+    assert proc.cleanup_chamado is True
+    assert not os.path.exists(temp_orig)
+    # A legenda preexistente do usuário NÃO deve ser apagada!
+    assert os.path.exists(final_sub)
+    with open(final_sub, "r", encoding="utf-8") as f:
+        assert f.read() == "Legenda preexistente do usuario intocada"
 
 
 def test_regressao_cancelamento_nao_deleta_origem_se_legenda_coincidir(tmp_path):
@@ -734,4 +769,102 @@ def test_regressao_pontos_de_entrada_inicializacao(mocker):
         assert "tema" in ordem
         assert "i18n" in ordem
         mock_view.mainloop.assert_called_once()
+
+
+def test_etapa1_orcamento_caracteres_divide_lote_grande(tmp_path):
+    import pysubs2
+    from tradutor.servico_traducao import ServicoTraducao
+
+    subs = pysubs2.SSAFile()
+    for _ in range(10):
+        subs.append(pysubs2.SSAEvent(start=0, end=1000, text="A" * 600))
+
+    indices = list(range(len(subs)))
+    lotes = ServicoTraducao._montar_lotes(subs, indices)
+    assert len(lotes) >= 2
+    for lote in lotes:
+        assert sum(len(subs[i].text) for i in lote) <= 3500
+
+
+def test_etapa1_escudo_remove_espaco_antes_de_ponto_e_tags_html(tmp_path):
+    from tradutor.glossario import GerenciadorGlossario
+
+    arq_gloss = tmp_path / "glossario.txt"
+    arq_gloss.write_text("Goku\n", encoding="utf-8")
+    g = GerenciadorGlossario(filepath=str(arq_gloss))
+
+    payload = g.proteger("<i>Goku</i>.")
+    restaurado = g.restaurar(payload.texto_mascarado, payload)
+    assert restaurado == "<i>Goku</i>."
+
+
+def test_etapa1_particionador_preserva_interrogacao_no_bloco():
+    from tradutor.particionador_texto import ParticionadorTexto
+
+    p = ParticionadorTexto(limite_caracteres=18)
+    texto = "Voce esta bem? Eu estou otimo!"
+    blocos = p.particionar(texto)
+    assert blocos[0].endswith("?")
+    assert p.recompor_texto(texto, blocos, blocos) == texto
+
+
+def test_etapa2_disjuntor_half_open_permite_apenas_uma_sonda_concorrente():
+    import time
+    import pytest
+    from tradutor.tradutores.base import ExcecaoDisjuntorAberto
+    from tradutor.tradutores.google import MotorTraducaoGoogle
+
+    motor = MotorTraducaoGoogle(max_retries=1, failure_threshold=2, recovery_timeout=10)
+    motor._is_open = True
+    motor._failure_count = 2
+    motor._last_failure_time = time.time() - 20
+
+    # Primeira thread entra como sonda Half-Open
+    motor._check_circuit()
+    assert motor._sonda_half_open_ativa is True
+
+    # Segunda thread simultanea deve ser barrada enquanto a sonda nao conclui
+    with pytest.raises(ExcecaoDisjuntorAberto):
+        motor._check_circuit()
+
+    # Ao registrar sucesso, libera para todas as threads
+    motor._record_success()
+    assert motor._sonda_half_open_ativa is False
+    motor._check_circuit()
+
+
+def test_etapa3_textos_extensos_nao_chama_get_unitario_quando_get_many_disponivel():
+    from tradutor.servico_textos_extensos import TradutorTextosExtensos
+    from tradutor.tradutores.base import ITradutor
+
+    class FakeTradutor(ITradutor):
+        def translate(self, text: str, src_lang: str, dest_lang: str) -> str:
+            return f"[PT]{text}"
+
+    class SpyCache:
+        def __init__(self):
+            self.chamadas_get_many = 0
+            self.chamadas_get = 0
+            self.salvos = {}
+
+        def get_many(self, textos, src_lang, dest_lang):
+            self.chamadas_get_many += 1
+            return {}
+
+        def get(self, texto, src_lang, dest_lang):
+            self.chamadas_get += 1
+            return None
+
+        def put(self, texto, src_lang, dest_lang, texto_traduzido):
+            self.salvos[texto] = texto_traduzido
+
+    spy_cache = SpyCache()
+    servico = TradutorTextosExtensos(tradutor=FakeTradutor(), cache=spy_cache, limite_caracteres=20)
+    resultado = servico.traduzir_sincrono("Primeiro bloco.\n\nSegundo bloco.", "en", "pt")
+    assert "[PT]" in resultado
+    assert spy_cache.chamadas_get_many == 1
+    assert spy_cache.chamadas_get == 0
+
+
+
 

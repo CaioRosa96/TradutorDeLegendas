@@ -20,6 +20,8 @@ class CacheTraducoes:
 
     def __init__(self, db_path="cache_traducoes.db"):
         self._lock = threading.RLock()
+        self._local = threading.local()
+        self._conexoes_threads: list[sqlite3.Connection] = []
         if os.path.isabs(db_path):
             self.db_path = db_path
         else:

@@ -118,6 +118,25 @@ class GerenciadorGlossario:
                 pass
 
     _PADRAO_TAGS_FORMATACAO = re.compile(r'(\{[^}\n]+\}|</?[a-zA-Z][^>\n]*>)')
+    _PADRAO_TOKEN_RESTAURACAO = re.compile(
+        r'(?i)\bT[ \t]*K[ \t]*G[ \t]*L[ \t]*O[ \t]*S[ \t]*S[ \t]*(\d+)[ \t]*T\b'
+    )
+
+    def _obter_padroes_termos(self):
+        """Retorna lista de (pattern, key) pré-compilados em ordem decrescente de tamanho."""
+        assinatura = tuple(self.glossario_map.items())
+        if getattr(self, "_assinatura_regex", None) != assinatura:
+            if not self.glossario_map:
+                self._padroes_termos = []
+            else:
+                sorted_keys = sorted(self.glossario_map.keys(), key=len, reverse=True)
+                self._padroes_termos = [
+                    (re.compile(rf'(?i)(?<!\w){re.escape(k)}(?!\w)'), k)
+                    for k in sorted_keys
+                    if k
+                ]
+            self._assinatura_regex = assinatura
+        return self._padroes_termos
 
     def apply_shield(self, text):
         """Aplica o escudo substituindo termos e tags de formatação por tokens."""
@@ -125,7 +144,7 @@ class GerenciadorGlossario:
         tem_tags = bool(self._PADRAO_TAGS_FORMATACAO.search(text))
         if not self.glossario_map and not tem_tags:
             return text, mapping
-            
+
         shielded_text = text
         counter = 0
 
@@ -139,13 +158,8 @@ class GerenciadorGlossario:
 
             shielded_text, _ = self._PADRAO_TAGS_FORMATACAO.subn(repl_tag, shielded_text)
 
-        # Substitui os termos mais longos primeiro para evitar conflitos parciais
-        sorted_keys = sorted(self.glossario_map.keys(), key=len, reverse=True)
-        
-        for key in sorted_keys:
-            escaped_key = re.escape(key)
-            pattern = re.compile(rf'(?i)(?<!\w){escaped_key}(?!\w)')
-            
+        padroes = self._obter_padroes_termos()
+        for pattern, key in padroes:
             def repl(match):
                 nonlocal counter
                 token = f"TKGLOSS{counter}T"
@@ -154,27 +168,27 @@ class GerenciadorGlossario:
                 return f" {token} "
 
             shielded_text, _ = pattern.subn(repl, shielded_text)
-            
+
         return shielded_text, mapping
 
     def remove_shield(self, text, mapping):
-        """Remove o escudo restaurando os termos traduzidos."""
+        """Remove o escudo restaurando os termos traduzidos em passagem única."""
         if not mapping:
             return text
-            
-        final_text = text
-        for token, tgt in mapping.items():
-            # O token sempre começa com TKGLOSS e termina com T
-            # Usa [ \t]* em vez de \s* para nunca atravessar quebras de linha (\n) entre lotes.
-            num = token[7:-1]
-            pattern = re.compile(r'(?i)\bT[ \t]*K[ \t]*G[ \t]*L[ \t]*O[ \t]*S[ \t]*S[ \t]*' + str(num) + r'[ \t]*T\b')
-            final_text = pattern.sub(lambda _: tgt, final_text)
+
+        def repl_restaurar(match):
+            chave = f"TKGLOSS{match.group(1)}T"
+            return mapping.get(chave, match.group(0))
+
+        final_text = self._PADRAO_TOKEN_RESTAURACAO.sub(repl_restaurar, text)
             
         # Limpa espaços duplos linha a linha preservando quebras \n de borda do lote
         linhas = [re.sub(r'[ \t]+', ' ', linha).strip() for linha in final_text.split('\n')]
         final_text = '\n'.join(linhas)
         final_text = re.sub(r'(\{[^}\n]+\})[ \t]+', r'\1', final_text)
-        final_text = re.sub(r'[ \t]+([!?,;:])', r'\1', final_text)
+        final_text = re.sub(r'(<[a-zA-Z][^>/\n]*>)[ \t]+', r'\1', final_text)
+        final_text = re.sub(r'[ \t]+(</[a-zA-Z][^>\n]*>)', r'\1', final_text)
+        final_text = re.sub(r'[ \t]+([!?,;:.])', r'\1', final_text)
         return final_text
 
     def proteger(self, texto: str, id_linha: int = 0) -> LinhaProtegida:

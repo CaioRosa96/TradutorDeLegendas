@@ -80,12 +80,15 @@ class ProcessadorArquivoBase(ABC):
         if not self._check_conflicts(caminhos_saida, arq_trabalho):
             return False
 
-        try:
-            caminho_legenda_final = caminhos_saida['legenda']
+        caminho_legenda_final = caminhos_saida['legenda']
+        legenda_preexistente = bool(caminho_legenda_final and os.path.isfile(caminho_legenda_final))
+        legenda_gerada_nesta_execucao = False
 
+        try:
             # 5. Tradução (ou cópia direta quando já transcrito no idioma de destino)
-            if mesmo_idioma and getattr(self, "_transcrito_por_ia", False):
+            if mesmo_idioma and self.deve_copiar_sem_traduzir():
                 shutil.copyfile(arq_trabalho, caminho_legenda_final)
+                legenda_gerada_nesta_execucao = True
             else:
                 self.log(self.get_translation_message())
                 engine = self.engine or MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
@@ -99,23 +102,28 @@ class ProcessadorArquivoBase(ABC):
                 sucesso_trad = asyncio.run(
                     translator_svc.pipeline(arq_trabalho, caminho_legenda_final, idioma_real, idioma_destino)
                 )
-                if not sucesso_trad or not os.path.isfile(caminho_legenda_final):
+                legenda_gerada_nesta_execucao = bool(sucesso_trad and os.path.isfile(caminho_legenda_final))
+                if not legenda_gerada_nesta_execucao:
                     self.log("[ERRO CRÍTICO] Tradução falhou ou arquivo final ausente. Abortando multiplexação.")
                     self.cleanup_temporary(arq_trabalho)
-                    if not manter_legenda and os.path.isfile(caminho_legenda_final) and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem):
-                        try:
-                            os.remove(caminho_legenda_final)
-                        except OSError:
-                            pass
+                    self._limpar_legenda_intermediaria(
+                        caminho_legenda_final,
+                        origem,
+                        manter_legenda,
+                        legenda_preexistente,
+                        legenda_gerada_nesta_execucao,
+                    )
                     return False
 
             if not self.is_running():
                 self.cleanup_temporary(arq_trabalho)
-                if not manter_legenda and os.path.isfile(caminho_legenda_final) and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem):
-                    try:
-                        os.remove(caminho_legenda_final)
-                    except OSError:
-                        pass
+                self._limpar_legenda_intermediaria(
+                    caminho_legenda_final,
+                    origem,
+                    manter_legenda,
+                    legenda_preexistente,
+                    legenda_gerada_nesta_execucao,
+                )
                 return False
 
             # 6. Finalização (Muxing MKV ou Conclusão SRT)
@@ -124,17 +132,35 @@ class ProcessadorArquivoBase(ABC):
 
         except Exception as e:
             self.cleanup_temporary(arq_trabalho)
-            if (
-                not manter_legenda
-                and 'caminho_legenda_final' in locals()
-                and os.path.isfile(caminho_legenda_final)
-                and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem)
-            ):
-                try:
-                    os.remove(caminho_legenda_final)
-                except OSError:
-                    pass
+            self._limpar_legenda_intermediaria(
+                caminho_legenda_final,
+                origem,
+                manter_legenda,
+                legenda_preexistente,
+                legenda_gerada_nesta_execucao,
+            )
             raise e
+
+    @staticmethod
+    def _limpar_legenda_intermediaria(
+        caminho_legenda_final: str | None,
+        origem: str,
+        manter_legenda: bool,
+        legenda_preexistente: bool,
+        legenda_gerada_nesta_execucao: bool,
+    ) -> None:
+        """Remove a legenda intermediária apenas se não era um arquivo preexistente intocado."""
+        if (
+            not manter_legenda
+            and caminho_legenda_final
+            and os.path.isfile(caminho_legenda_final)
+            and os.path.abspath(caminho_legenda_final) != os.path.abspath(origem)
+            and (legenda_gerada_nesta_execucao or not legenda_preexistente)
+        ):
+            try:
+                os.remove(caminho_legenda_final)
+            except OSError:
+                pass
 
     def _check_conflicts(self, caminhos_saida: dict, arq_trabalho: str) -> bool:
         """Verifica se os arquivos de saída já existem e pede confirmação ao usuário."""
@@ -158,6 +184,10 @@ class ProcessadorArquivoBase(ABC):
     def prepare(self, origem: str, idioma_origem: str) -> tuple[str, str]:
         """Prepara o arquivo de legenda de trabalho e descobre o idioma real."""
         pass
+
+    def deve_copiar_sem_traduzir(self) -> bool:
+        """Indica se o arquivo preparado já está pronto no idioma de destino (ex: transcrição IA)."""
+        return bool(getattr(self, "_transcrito_por_ia", False))
 
     @abstractmethod
     def should_skip_if_same_language(self) -> bool:

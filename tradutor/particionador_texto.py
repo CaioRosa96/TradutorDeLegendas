@@ -37,6 +37,11 @@ class ParticionadorTexto:
         """Limite máximo de caracteres por bloco."""
         return self._limite_caracteres
 
+    @property
+    def delimitadores(self) -> tuple[str, ...]:
+        """Hierarquia pública de delimitadores para particionamento e fallback."""
+        return self._DELIMITADORES
+
     def particionar(self, texto: str) -> list[str]:
         """Divide o texto em blocos de tamanho menor ou igual ao limite."""
         if not texto:
@@ -71,11 +76,20 @@ class ParticionadorTexto:
             return self._dividir_em_unidades(trecho, nivel + 1)
 
         unidades: list[tuple[str, str]] = []
+        pontuacao_embutida = len(sep) == 2 and sep[0] in ".!?;" and sep[1] == " "
+
         for i, parte in enumerate(partes):
-            delimitador = sep if i < len(partes) - 1 else ""
-            if len(parte) <= self._limite_caracteres:
-                if parte:
-                    unidades.append((parte, delimitador))
+            tem_proximo = i < len(partes) - 1
+            if tem_proximo and pontuacao_embutida and parte:
+                parte_efetiva = parte + sep[0]
+                delimitador = sep[1:]
+            else:
+                parte_efetiva = parte
+                delimitador = sep if tem_proximo else ""
+
+            if len(parte_efetiva) <= self._limite_caracteres:
+                if parte_efetiva:
+                    unidades.append((parte_efetiva, delimitador))
                 elif delimitador:
                     if unidades:
                         u_ant, d_ant = unidades[-1]
@@ -83,7 +97,7 @@ class ParticionadorTexto:
                     else:
                         unidades.append(("", delimitador))
             else:
-                sub = self._dividir_em_unidades(parte, nivel + 1)
+                sub = self._dividir_em_unidades(parte_efetiva, nivel + 1)
                 if sub and delimitador:
                     u_ult, d_ult = sub[-1]
                     sub[-1] = (u_ult, d_ult + delimitador)

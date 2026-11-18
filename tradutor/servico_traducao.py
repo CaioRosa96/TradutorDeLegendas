@@ -143,37 +143,96 @@ class ServicoTraducao:
 
                     if cache_parcial:
                         pendentes = []
+                        acertos_parciais = 0
                         for idx, p_linha in zip(lote_indices, payloads_linhas):
                             if p_linha.texto_mascarado in cache_parcial:
                                 r_cached = cache_parcial[p_linha.texto_mascarado]
                                 r_rest = self._glossary.restaurar(r_cached, p_linha)
                                 subs[idx].text = self._limpar_quebras(r_rest.strip())
+                                acertos_parciais += 1
                             else:
                                 pendentes.append((idx, p_linha))
 
                         if pendentes:
-                            sub_bloco = "\n".join(p.texto_mascarado for _, p in pendentes)
-                            sub_trad = await loop.run_in_executor(
-                                executor, self._engine.translate, sub_bloco, src_lang, dest_lang
-                            )
-                            sub_linhas = sub_trad.split("\n")
-                            if len(sub_linhas) == len(pendentes) + 1 and not sub_linhas[-1].strip():
-                                sub_linhas = sub_linhas[:-1]
-                            if len(sub_linhas) == len(pendentes):
-                                novos_lote = {}
-                                for (idx, p_linha), linha_bruta in zip(pendentes, sub_linhas):
-                                    r_rest = self._glossary.restaurar(linha_bruta, p_linha)
-                                    f_limpa = self._limpar_quebras(r_rest.strip())
-                                    subs[idx].text = f_limpa
-                                    if not p_linha.possui_tokens and p_linha.texto_mascarado:
-                                        novos_lote[p_linha.texto_mascarado] = f_limpa
-                                self._salvar_lote_cache_seguro(novos_lote, src_lang, dest_lang)
+                            try:
+                                sub_bloco = "\n".join(p.texto_mascarado for _, p in pendentes)
+                                sub_trad = await loop.run_in_executor(
+                                    executor, self._engine.translate, sub_bloco, src_lang, dest_lang
+                                )
+                                sub_linhas = sub_trad.split("\n")
+                                if len(sub_linhas) == len(pendentes) + 1 and not sub_linhas[-1].strip():
+                                    sub_linhas = sub_linhas[:-1]
+                                if len(sub_linhas) == len(pendentes):
+                                    novos_lote = {}
+                                    for (idx, p_linha), linha_bruta in zip(pendentes, sub_linhas):
+                                        r_rest = self._glossary.restaurar(linha_bruta, p_linha)
+                                        f_limpa = self._limpar_quebras(r_rest.strip())
+                                        subs[idx].text = f_limpa
+                                        if not p_linha.possui_tokens and p_linha.texto_mascarado:
+                                            novos_lote[p_linha.texto_mascarado] = f_limpa
+                                    self._salvar_lote_cache_seguro(novos_lote, src_lang, dest_lang)
+                                    with self._lock_stats:
+                                        self._linhas_traduzidas_sucesso += len(lote_indices)
+                                    with pbar_lock:
+                                        self._linhas_processadas += len(lote_indices)
+                                        self._progress_callback(self._linhas_processadas, self._total_linhas)
+                                    return
+                            except ExcecaoDisjuntorAberto:
                                 with self._lock_stats:
-                                    self._linhas_traduzidas_sucesso += len(lote_indices)
+                                    self._disjuntor_disparado = True
+                                    self._linhas_traduzidas_sucesso += acertos_parciais
+                                for idx_pend, p_pend in pendentes:
+                                    subs[idx_pend].text = self._limpar_quebras(p_pend.texto_original)
                                 with pbar_lock:
                                     self._linhas_processadas += len(lote_indices)
                                     self._progress_callback(self._linhas_processadas, self._total_linhas)
                                 return
+                            except Exception as e:
+                                if "circuit breaker" in str(e).lower() or "disjuntor" in str(e).lower():
+                                    with self._lock_stats:
+                                        self._disjuntor_disparado = True
+                                        self._linhas_traduzidas_sucesso += acertos_parciais
+                                    for idx_pend, p_pend in pendentes:
+                                        subs[idx_pend].text = self._limpar_quebras(p_pend.texto_original)
+                                    with pbar_lock:
+                                        self._linhas_processadas += len(lote_indices)
+                                        self._progress_callback(self._linhas_processadas, self._total_linhas)
+                                    return
+
+                            # Fallback restrito apenas aos itens pendentes (preserva acertos_parciais)
+                            with self._lock_stats:
+                                self._linhas_traduzidas_sucesso += acertos_parciais
+                            for pos_p, (idx_pend, p_pend) in enumerate(pendentes):
+                                if self._is_cancelled():
+                                    for rem_idx, rem_p in pendentes[pos_p:]:
+                                        subs[rem_idx].text = self._limpar_quebras(rem_p.texto_original)
+                                    break
+                                try:
+                                    r_pend = await loop.run_in_executor(
+                                        executor, self._engine.translate, p_pend.texto_mascarado, src_lang, dest_lang
+                                    )
+                                except ExcecaoDisjuntorAberto:
+                                    with self._lock_stats:
+                                        self._disjuntor_disparado = True
+                                    for rem_idx, rem_p in pendentes[pos_p:]:
+                                        subs[rem_idx].text = self._limpar_quebras(rem_p.texto_original)
+                                    break
+                                except Exception:
+                                    subs[idx_pend].text = self._limpar_quebras(p_pend.texto_original)
+                                    continue
+                                if not p_pend.possui_tokens:
+                                    self._salvar_cache_seguro(p_pend.texto_mascarado, src_lang, dest_lang, r_pend)
+                                r_rest_pend = self._glossary.restaurar(r_pend, p_pend)
+                                subs[idx_pend].text = self._limpar_quebras(r_rest_pend)
+                                with self._lock_stats:
+                                    self._linhas_traduzidas_sucesso += 1
+                                pausa = getattr(GerenciadorConfig, "PAUSA_FALLBACK_SEGUNDOS", 0.5)
+                                await asyncio.sleep(pausa)
+
+                            with pbar_lock:
+                                self._linhas_processadas += len(lote_indices)
+                                self._progress_callback(self._linhas_processadas, self._total_linhas)
+                            return
 
                     # 2. Se não existir, vai na Rede via Engine injetada
                     traduzido = await loop.run_in_executor(executor, self._engine.translate, bloco_protegido, src_lang, dest_lang)
@@ -213,11 +272,13 @@ class ServicoTraducao:
                         texto_protegido = payload_linha.texto_mascarado
 
                         r = self._cache.get(texto_protegido, src_lang, dest_lang)
+                        consultou_rede = False
                         if not r:
                             try:
                                 r = await loop.run_in_executor(
                                     executor, self._engine.translate, texto_protegido, src_lang, dest_lang
                                 )
+                                consultou_rede = True
                             except ExcecaoDisjuntorAberto:
                                 with self._lock_stats:
                                     self._disjuntor_disparado = True
@@ -238,8 +299,9 @@ class ServicoTraducao:
                             for rem_idx, rem_texto in zip(lote_indices[pos + 1:], textos_preparados[pos + 1:]):
                                 subs[rem_idx].text = self._limpar_quebras(rem_texto)
                             break
-                        pausa = getattr(GerenciadorConfig, "PAUSA_FALLBACK_SEGUNDOS", 0.5)
-                        await asyncio.sleep(pausa)
+                        if consultou_rede:
+                            pausa = getattr(GerenciadorConfig, "PAUSA_FALLBACK_SEGUNDOS", 0.5)
+                            await asyncio.sleep(pausa)
             except Exception as e:
                 if isinstance(e, ExcecaoDisjuntorAberto) or "circuit breaker" in str(e).lower() or "disjuntor" in str(e).lower():
                     with self._lock_stats:
@@ -289,10 +351,7 @@ class ServicoTraducao:
         self._logger(f"Total de diálogos encontrados: {self._total_linhas}")
         self._progress_callback(0, self._total_linhas)
 
-        lotes = [
-            indices_map[i : i + GerenciadorConfig.TAMANHO_LOTE]
-            for i in range(0, self._total_linhas, GerenciadorConfig.TAMANHO_LOTE)
-        ]
+        lotes = self._montar_lotes(subs, indices_map)
         semaforo = asyncio.Semaphore(GerenciadorConfig.MAX_CONCORRENTE)
         pbar_lock = threading.Lock()
 
@@ -313,5 +372,45 @@ class ServicoTraducao:
             raise RuntimeError("Falha total na tradução: nenhuma linha foi traduzida.")
 
         self._logger("Salvando arquivo de legendas traduzido...")
-        subs.save(destino)
+        self._salvar_legenda_atomico(subs, destino)
         return True
+
+    @staticmethod
+    def _montar_lotes(subs, indices_map: list[int]) -> list[list[int]]:
+        """Agrupa índices respeitando simultaneamente limite de linhas e orçamento de caracteres."""
+        max_linhas = max(1, int(getattr(GerenciadorConfig, "TAMANHO_LOTE", 40)))
+        max_chars = max(200, int(getattr(GerenciadorConfig, "LIMITE_CARACTERES_LOTE", 3500)))
+        lotes: list[list[int]] = []
+        lote_atual: list[int] = []
+        chars_atual = 0
+
+        for idx in indices_map:
+            tam_linha = len(subs[idx].text) + 1
+            if lote_atual and (len(lote_atual) >= max_linhas or chars_atual + tam_linha > max_chars):
+                lotes.append(lote_atual)
+                lote_atual = [idx]
+                chars_atual = tam_linha
+            else:
+                lote_atual.append(idx)
+                chars_atual += tam_linha
+
+        if lote_atual:
+            lotes.append(lote_atual)
+        return lotes
+
+    @staticmethod
+    def _salvar_legenda_atomico(subs, destino: str) -> None:
+        """Salva a legenda em arquivo temporário com a mesma extensão e promove via os.replace."""
+        base_dest, ext_dest = os.path.splitext(destino)
+        ext_efetiva = ext_dest if ext_dest else ".srt"
+        destino_tmp = f"{base_dest}.tmp_{os.getpid()}_{threading.get_ident()}{ext_efetiva}"
+        try:
+            subs.save(destino_tmp)
+            os.replace(destino_tmp, destino)
+        except Exception:
+            if os.path.isfile(destino_tmp):
+                try:
+                    os.remove(destino_tmp)
+                except OSError:
+                    pass
+            raise

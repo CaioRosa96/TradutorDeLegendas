@@ -98,7 +98,8 @@ class TradutorTextosExtensos:
         total_blocos = len(blocos)
         concluidos = 0
 
-        cache_map = self._obter_cache_em_lote(blocos, src_norm, dest_norm)
+        suporta_lote = self._cache is not None and hasattr(self._cache, "get_many")
+        cache_map = self._obter_cache_em_lote(blocos, src_norm, dest_norm) if suporta_lote else {}
 
         async def _processar_bloco(bloco: str) -> str:
             nonlocal concluidos
@@ -110,11 +111,12 @@ class TradutorTextosExtensos:
                 self._progress_callback(concluidos, total_blocos)
                 return cache_map[bloco]
 
-            cached = self._obter_cache_unitario(bloco, src_norm, dest_norm)
-            if cached is not None:
-                concluidos += 1
-                self._progress_callback(concluidos, total_blocos)
-                return cached
+            if not suporta_lote:
+                cached = self._obter_cache_unitario(bloco, src_norm, dest_norm)
+                if cached is not None:
+                    concluidos += 1
+                    self._progress_callback(concluidos, total_blocos)
+                    return cached
 
             async with semaforo:
                 if self._is_cancelled():
@@ -193,33 +195,48 @@ class TradutorTextosExtensos:
         if self._is_cancelled():
             return bloco, False
 
-        # Fallback resiliente: divide pelo delimitador hierárquico mais significativo
-        for sep in self._particionador._DELIMITADORES:
-            if not sep:
+        return await self._fallback_hierarquico(loop, bloco, src_lang, dest_lang, nivel_inicial=0)
+
+    async def _fallback_hierarquico(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        bloco: str,
+        src_lang: str,
+        dest_lang: str,
+        nivel_inicial: int = 0,
+    ) -> tuple[str, bool]:
+        """Divide recursivamente o bloco pela hierarquia de delimitadores em caso de falha."""
+        delimitadores = getattr(self._particionador, "delimitadores", self._particionador._DELIMITADORES)
+        for idx_sep in range(nivel_inicial, len(delimitadores)):
+            sep = delimitadores[idx_sep]
+            if not sep or sep == " " or sep not in bloco:
                 continue
-            if sep in bloco:
-                sub_blocos = [p for p in bloco.split(sep) if p]
-                if len(sub_blocos) > 1:
-                    sub_traduzidos: list[str] = []
-                    falha_parcial = False
-                    for sb in sub_blocos:
-                        if self._is_cancelled():
+            sub_blocos = [p for p in bloco.split(sep) if p]
+            if len(sub_blocos) > 1:
+                sub_traduzidos: list[str] = []
+                falha_parcial = False
+                for sb in sub_blocos:
+                    if self._is_cancelled():
+                        falha_parcial = True
+                        sub_traduzidos.append(sb)
+                        continue
+                    try:
+                        trad_sb = await loop.run_in_executor(
+                            None, self._tradutor.translate, sb, src_lang, dest_lang
+                        )
+                        sub_traduzidos.append(trad_sb)
+                    except ExcecaoDisjuntorAberto:
+                        raise
+                    except Exception:
+                        trad_rec, ok_rec = await self._fallback_hierarquico(
+                            loop, sb, src_lang, dest_lang, nivel_inicial=idx_sep + 1
+                        )
+                        if not ok_rec:
                             falha_parcial = True
-                            sub_traduzidos.append(sb)
-                            continue
-                        try:
-                            trad_sb = await loop.run_in_executor(
-                                None, self._tradutor.translate, sb, src_lang, dest_lang
-                            )
-                            sub_traduzidos.append(trad_sb)
-                        except ExcecaoDisjuntorAberto:
-                            raise
-                        except Exception:
-                            falha_parcial = True
-                            sub_traduzidos.append(sb)
-                    recomposto = self._particionador.recompor_texto(bloco, sub_blocos, sub_traduzidos)
-                    sucesso_total = not falha_parcial and not self._is_cancelled()
-                    return recomposto, sucesso_total
+                        sub_traduzidos.append(trad_rec)
+                recomposto = self._particionador.recompor_texto(bloco, sub_blocos, sub_traduzidos)
+                sucesso_total = not falha_parcial and not self._is_cancelled()
+                return recomposto, sucesso_total
 
         return bloco, False
 

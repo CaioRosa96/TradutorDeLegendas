@@ -3,9 +3,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping, Protocol, Sequence, runtime_checkable
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence, runtime_checkable
 
-from .manipulador_midia import ManipuladorMidiaPort, TrilhaMidia
+if TYPE_CHECKING:
+    from .manipulador_midia import ManipuladorMidiaPort, TrilhaMidia
+
+
+def __getattr__(name: str) -> Any:
+    if name in ("ManipuladorMidiaPort", "TrilhaMidia"):
+        from . import manipulador_midia
+
+        return getattr(manipulador_midia, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,3 +1,4 @@
+import random
 import threading
 import time
 from googletrans import Translator
@@ -24,6 +25,7 @@ class MotorTraducaoGoogle(ITradutor):
         self._last_failure_time = 0
         self._recovery_timeout = recovery_timeout
         self._is_open = False
+        self._sonda_half_open_ativa = False
 
     def _get_engine(self):
         """Retorna uma instância de Translator isolada para a thread atual."""
@@ -43,16 +45,22 @@ class MotorTraducaoGoogle(ITradutor):
         with self._lock:
             if self._is_open:
                 if time.time() - self._last_failure_time > self._recovery_timeout:
+                    if self._sonda_half_open_ativa:
+                        raise ExcecaoDisjuntorAberto("Circuit Breaker HALF-OPEN: Sonda em andamento.")
                     self._is_open = False
+                    self._sonda_half_open_ativa = True
                     deve_logar_half_open = True
                 else:
                     raise ExcecaoDisjuntorAberto("Circuit Breaker ABERTO: Abortando para evitar banimentos.")
+            elif self._sonda_half_open_ativa:
+                raise ExcecaoDisjuntorAberto("Circuit Breaker HALF-OPEN: Sonda em andamento.")
         if deve_logar_half_open:
             app_logger.info("Circuit Breaker: Testando recuperação da API (Half-Open).")
 
     def _record_failure(self):
         deve_logar_erro = False
         with self._lock:
+            self._sonda_half_open_ativa = False
             self._failure_count += 1
             self._last_failure_time = time.time()
             if self._failure_count >= self._failure_threshold:
@@ -64,10 +72,11 @@ class MotorTraducaoGoogle(ITradutor):
     def _record_success(self):
         deve_logar_recuperacao = False
         with self._lock:
-            if self._failure_count > 0:
+            if self._failure_count > 0 or self._sonda_half_open_ativa:
                 deve_logar_recuperacao = True
             self._failure_count = 0
             self._is_open = False
+            self._sonda_half_open_ativa = False
         if deve_logar_recuperacao:
             app_logger.info("Circuit Breaker: Conexão estabilizada. Resetando falhas.")
 
