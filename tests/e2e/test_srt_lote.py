@@ -44,6 +44,8 @@ def rodar_teste():
     patcher_anilist.start()
     patcher_anilist_mod = patch('tradutor.anilist.auto_alimentar', return_value=None)
     patcher_anilist_mod.start()
+    patcher_graphql = patch('tradutor.glossario_port.AdaptadorAniListGraphQL.buscar_nomes_proprios', return_value=[])
+    patcher_graphql.start()
     # --------------------------
     
     # Mockando a interface gráfica
@@ -161,6 +163,10 @@ def rodar_teste():
                 pass
 
     patcher_cache.stop()
+    patcher.stop()
+    patcher_anilist.stop()
+    patcher_anilist_mod.stop()
+    patcher_graphql.stop()
     temp_dir_cache.cleanup()
 
     print(f"\n[ANALISE PRONTA] Relatório geral salvo em: {relatorio_path}")

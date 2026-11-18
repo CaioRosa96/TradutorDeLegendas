@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import pytest
 
 # Garante que a raiz do projeto esteja no sys.path
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -15,9 +16,41 @@ os.environ.setdefault(
 
 # Garante configuração automática de caminhos do Tcl/Tk em ambientes Windows
 if sys.platform == "win32":
-    tcl_path = os.path.join(sys.base_prefix, "tcl", "tcl8.6")
-    tk_path = os.path.join(sys.base_prefix, "tcl", "tk8.6")
-    if os.path.isdir(tcl_path) and "TCL_LIBRARY" not in os.environ:
+    try:
+        import ctypes
+        ctypes.cdll.msvcrt._setmaxstdio(2048)
+    except Exception:
+        pass
+    tcl_path = os.path.join(sys.base_prefix, "tcl", "tcl8.6").replace("\\", "/")
+    tk_path = os.path.join(sys.base_prefix, "tcl", "tk8.6").replace("\\", "/")
+    if os.path.isdir(tcl_path):
         os.environ["TCL_LIBRARY"] = tcl_path
-    if os.path.isdir(tk_path) and "TK_LIBRARY" not in os.environ:
+    if os.path.isdir(tk_path):
         os.environ["TK_LIBRARY"] = tk_path
+
+
+@pytest.fixture(autouse=True)
+def isolar_ambiente_testes(tmp_path, request):
+    """Isola preferências do usuário e diretório de glossários durante os testes."""
+    from tradutor.config import GerenciadorConfig
+    from tradutor.config_usuario import PreferenciasUsuario
+
+    orig_arquivo_prefs = PreferenciasUsuario.ARQUIVO_PREFERENCIAS
+    orig_dados = PreferenciasUsuario._dados
+    orig_dir_gloss = GerenciadorConfig.DIRETORIO_GLOSSARIOS
+
+    temp_prefs = tmp_path / "preferencias.json"
+    PreferenciasUsuario.ARQUIVO_PREFERENCIAS = str(temp_prefs)
+    PreferenciasUsuario._dados = None
+
+    if request.node.name != "test_leitura_glossarios_grimorio":
+        temp_gloss = tmp_path / "_conftest_glossarios"
+        temp_gloss.mkdir(parents=True, exist_ok=True)
+        GerenciadorConfig.DIRETORIO_GLOSSARIOS = str(temp_gloss)
+
+    try:
+        yield
+    finally:
+        PreferenciasUsuario.ARQUIVO_PREFERENCIAS = orig_arquivo_prefs
+        PreferenciasUsuario._dados = orig_dados
+        GerenciadorConfig.DIRETORIO_GLOSSARIOS = orig_dir_gloss

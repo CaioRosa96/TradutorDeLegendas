@@ -14,6 +14,8 @@ def gerenciador_mock(tmp_path, mocker):
     """
     # Impede disparar o script de busca automática se ele não achar o específico
     mocker.patch('alimentar_glossario.auto_alimentar', return_value=None)
+    mocker.patch('tradutor.anilist.auto_alimentar', return_value=None)
+    mocker.patch('tradutor.glossario_port.AdaptadorAniListGraphQL.buscar_nomes_proprios', return_value=[])
     
     # Cria o gerenciador sem carregar nada automático
     gg = GerenciadorGlossario(filepath=str(tmp_path / "fake_glossario.txt"))

@@ -431,6 +431,8 @@ def test_inicializacao_interface_classica(app_interface, mocker):
     # Encerra a janela moderna como último teste do módulo antes de instanciar a janela clássica
     app_interface.update_idletasks()
     app_interface.destroy()
+    import time
+    time.sleep(0.05)
 
     mocker.patch.object(mod_classica, "HAS_DND", False)
     app = InterfaceClassica()

@@ -19,6 +19,7 @@ from tradutor.logger import (
 )
 from tradutor.atualizador import ResultadoAtualizacao, VerificadorAtualizacao
 from tradutor.som import gerar_wav_acorde_conclusao, tocar_som_conclusao
+from tradutor.versao import InfoVersao
 
 
 def test_escolher_diretorio_logs_primario_e_fallback(tmp_path, monkeypatch):
@@ -107,7 +108,7 @@ def test_handler_arquivo_com_teto_suprime_apos_limite(tmp_path):
 def test_cabecalho_sessao_e_deteccao_windows(monkeypatch):
     """Verifica a formatacao do cabecalho de sessao com versao e sistema operacional."""
     cabecalho = gerar_cabecalho_sessao()
-    assert "Tradutor de Legendas v2.9.1" in cabecalho
+    assert f"Tradutor de Legendas {InfoVersao.tag()}" in cabecalho
     assert "Python" in cabecalho
     assert detectar_sistema_operacional() in cabecalho
 
