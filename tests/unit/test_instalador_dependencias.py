@@ -1,9 +1,7 @@
-"""Testes unitarios para resolucao de pasta customizada, download sob demanda e contrato de dependencias GPLv2."""
+"""Testes unitarios para resolucao de pasta customizada, instalacao via winget e contrato de dependencias GPLv2."""
 
-import io
 import os
 import sys
-import zipfile
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
@@ -55,38 +53,48 @@ def test_validacao_pasta_invalida_rejeita_diretorio_sem_executaveis(tmp_path, mo
     assert PreferenciasUsuario.obter("mkvtoolnix_custom") == ""
 
 
-def test_download_sob_demanda_extrai_zip_na_pasta_local(tmp_path, monkeypatch, mocker):
-    """Valida o download sob demanda de pacote .zip portatil e extracao atomica para mkvtoolnix/."""
+def test_instalacao_automatica_via_winget_sem_url_quebrada(tmp_path, monkeypatch, mocker):
+    """Garante que a instalacao automatica usa winget sem URL HTTP quebrada."""
     arq_prefs = str(tmp_path / "preferencias.json")
     monkeypatch.setattr(PreferenciasUsuario, "ARQUIVO_PREFERENCIAS", arq_prefs)
     PreferenciasUsuario._dados = None
-    monkeypatch.setattr(GerenciadorConfig, "DIRETORIO_EXECUCAO", str(tmp_path))
 
-    # Gera um pacote .zip valido em memoria contendo mkvmerge.exe e mkvextract.exe dentro de subpasta
-    buffer_zip = io.BytesIO()
-    with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mkvtoolnix-portable/mkvmerge.exe", b"MZ_PORTABLE_MERGE")
-        zf.writestr("mkvtoolnix-portable/mkvextract.exe", b"MZ_PORTABLE_EXTRACT")
-    conteudo_zip = buffer_zip.getvalue()
+    assert not hasattr(InstaladorDependencias, "URL_PACOTE_PORTATIL")
 
-    resposta_mock = mocker.MagicMock()
-    resposta_mock.__enter__.return_value = resposta_mock
-    resposta_mock.headers = {"content-length": str(len(conteudo_zip))}
-    resposta_mock.iter_content.return_value = [conteudo_zip]
-    resposta_mock.raise_for_status.return_value = None
-    mocker.patch("tradutor.instalador_dependencias.requests.get", return_value=resposta_mock)
-
-    progresso_chamadas = []
-    caminho_instalado = InstaladorDependencias.baixar_dependencias(
-        progresso_cb=lambda b, t: progresso_chamadas.append((b, t))
+    pasta_instalada = str(tmp_path / "MKVToolNix")
+    mocker.patch("tradutor.instalador_dependencias.shutil.which", return_value="winget.exe")
+    mock_run = mocker.patch(
+        "tradutor.instalador_dependencias.subprocess.run",
+        return_value=mocker.MagicMock(returncode=0),
     )
+    mocker.patch.object(GerenciadorConfig, "check_dependencies", side_effect=[False, True])
+    mocker.patch.object(GerenciadorConfig, "get_mkvtoolnix_path", return_value=pasta_instalada)
 
-    pasta_esperada = str(tmp_path / "mkvtoolnix")
-    assert caminho_instalado == pasta_esperada
-    assert (tmp_path / "mkvtoolnix" / "mkvmerge.exe").is_file()
-    assert (tmp_path / "mkvtoolnix" / "mkvextract.exe").is_file()
-    assert len(progresso_chamadas) == 1
-    assert progresso_chamadas[0] == (len(conteudo_zip), len(conteudo_zip))
+    caminho_retornado = InstaladorDependencias.baixar_dependencias()
+
+    assert caminho_retornado == pasta_instalada
+    mock_run.assert_called_once()
+    cmd_executado = mock_run.call_args[0][0]
+    assert cmd_executado[0] == "winget"
+    assert "install" in cmd_executado
+    assert InstaladorDependencias.WINGET_ID_MKVTOOLNIX in cmd_executado
+
+
+def test_instalacao_falha_quando_winget_indisponivel(monkeypatch, mocker):
+    """Garante erro explicito orientando download manual quando winget nao estiver disponivel."""
+    mocker.patch.object(GerenciadorConfig, "check_dependencies", return_value=False)
+    mocker.patch("tradutor.instalador_dependencias.shutil.which", return_value=None)
+
+    with pytest.raises(RuntimeError, match="winget"):
+        InstaladorDependencias.baixar_dependencias()
+
+
+def test_instalacao_respeita_cancelamento(mocker):
+    """Garante que cancelado_cb interrompe o fluxo levantando InterruptedError."""
+    mocker.patch.object(GerenciadorConfig, "check_dependencies", return_value=False)
+
+    with pytest.raises(InterruptedError):
+        InstaladorDependencias.baixar_dependencias(cancelado_cb=lambda: True)
 
 
 def test_processador_mkv_solicita_dependencias_quando_ausentes(mocker):

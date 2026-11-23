@@ -209,3 +209,34 @@ def test_motor_sanitiza_idioma_destino(translator_falso, logger_falso):
     with pytest.raises(ValueError, match="Idioma de destino invalido"):
         motor.translate("Hello", src_lang="en", dest_lang="invalido_xyz")
     assert translator_falso.translate.call_count == 0
+
+
+def test_half_open_com_dest_invalido_nao_trava_sonda(translator_falso, logger_falso):
+    """Destinos inválidos não podem adquirir e vazar a trava de sonda Half-Open."""
+    motor = MotorTraducaoGoogle(max_retries=1, failure_threshold=2, recovery_timeout=10)
+    motor._is_open = True
+    motor._failure_count = 2
+    motor._last_failure_time = time.time() - 20
+
+    with pytest.raises(ValueError, match="Idioma de destino invalido"):
+        motor.translate("Hello", "en", "auto")
+
+    assert motor._sonda_half_open_ativa is False
+
+    translator_falso.translate.return_value = SimpleNamespace(text="Ola")
+    assert motor.translate("Hello", "en", "pt") == "Ola"
+    assert motor._sonda_half_open_ativa is False
+
+
+def test_backoff_aplica_jitter_com_random_uniform(translator_falso, logger_falso, mocker):
+    """O backoff exponencial entre retentativas deve aplicar jitter via random.uniform."""
+    translator_falso.translate.side_effect = [
+        RuntimeError("erro temporario"),
+        SimpleNamespace(text="Ola"),
+    ]
+    mocker.patch("tradutor.tradutores.google.random.uniform", return_value=0.25)
+    mock_sleep = mocker.patch("tradutor.tradutores.google.time.sleep")
+
+    motor = MotorTraducaoGoogle(max_retries=2)
+    assert motor.translate("Hello", "en", "pt") == "Ola"
+    mock_sleep.assert_called_once_with(pytest.approx(1.25))

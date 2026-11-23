@@ -866,5 +866,238 @@ def test_etapa3_textos_extensos_nao_chama_get_unitario_quando_get_many_disponive
     assert spy_cache.chamadas_get == 0
 
 
+# ---------------------------------------------------------------------------
+# 12. Regressões v2.9.3: Contratos, CLI sem mutação em disco e Regex Única
+# ---------------------------------------------------------------------------
+def test_v293_configuracao_pipeline_propaga_todos_campos_ate_processador_mkv(tmp_path, monkeypatch, mocker):
+    """Todos os campos de ConfiguracaoPipeline devem reger o ProcessadorMkv sem depender de PreferenciasUsuario."""
+    from tradutor.contratos import ConfiguracaoPipeline
+    from tradutor.manipulador_midia import FakeManipuladorMidia
+    from tradutor.transcritores.base import ResultadoTranscricao
+
+    arq_prefs = str(tmp_path / "preferencias.json")
+    monkeypatch.setattr(PreferenciasUsuario, "ARQUIVO_PREFERENCIAS", arq_prefs)
+    PreferenciasUsuario._dados = {
+        **PreferenciasUsuario.PADRAO,
+        "forcar_transcricao": False,
+        "transcricao_habilitada": False,
+        "formato_saida_video": "converter_mkv",
+        "modelo_whisper": "tiny",
+    }
+
+    cfg = ConfiguracaoPipeline(
+        idioma_destino="pt",
+        idioma_origem="ja",
+        politica_sobrescrita="sobrescrever",
+        formato_saida_video="manter_original",
+        manter_legenda_externa=True,
+        habilitar_whisper=True,
+        forcar_whisper=True,
+        modelo_whisper_padrao="medium",
+    )
+
+    ask_overwrite = MagicMock(return_value=False)
+    ask_output_format = MagicMock(return_value="converter_mkv")
+    fake_midia = FakeManipuladorMidia()
+
+    proc = ProcessadorMkv(
+        log_cb=lambda _: None,
+        progress_cb=lambda *_: None,
+        ask_overwrite_cb=ask_overwrite,
+        is_running_cb=lambda: True,
+        ask_output_format_cb=ask_output_format,
+        output_dir=str(tmp_path),
+        manipulador_midia=fake_midia,
+        config=cfg,
+    )
+
+    # 1. formato_saida_video vem de cfg sem chamar ask_output_format nem PreferenciasUsuario
+    assert proc._resolver_politica_saida_video("video.mp4") == "manter_original"
+    assert ask_output_format.call_count == 0
+
+    # 2. politica_sobrescrita='sobrescrever' e 'pular' não chamam ask_overwrite
+    arq_existente = tmp_path / "existente.srt"
+    arq_existente.write_text("conteudo", encoding="utf-8")
+    assert proc._check_conflicts({"legenda": str(arq_existente)}, str(tmp_path / "tmp.srt")) is True
+    assert ask_overwrite.call_count == 0
+
+    cfg_pular = ConfiguracaoPipeline(politica_sobrescrita="pular")
+    proc_pular = ProcessadorMkv(
+        log_cb=lambda _: None,
+        progress_cb=lambda *_: None,
+        ask_overwrite_cb=ask_overwrite,
+        is_running_cb=lambda: True,
+        output_dir=str(tmp_path),
+        manipulador_midia=fake_midia,
+        config=cfg_pular,
+    )
+    assert proc_pular._check_conflicts({"legenda": str(arq_existente)}, str(tmp_path / "tmp.srt")) is False
+    assert ask_overwrite.call_count == 0
+
+    # 3. forcar_whisper=True e modelo_whisper_padrao='medium' são repassados ao MotorWhisperfile
+    srt_gerado = tmp_path / "ep_audio.srt"
+    srt_gerado.write_text("1\n00:00:01,000 --> 00:00:02,000\nOla\n", encoding="utf-8")
+
+    mock_motor_inst = MagicMock()
+    mock_motor_inst.esta_disponivel.return_value = True
+    mock_motor_inst.transcrever.return_value = ResultadoTranscricao(
+        caminho_srt=str(srt_gerado),
+        idioma_detectado="ja",
+        duracao_segundos=1.2,
+    )
+    mock_motor_cls = mocker.patch(
+        "tradutor.estrategias.processador_mkv.MotorWhisperfile",
+        return_value=mock_motor_inst,
+    )
+
+    arq_trab, idioma_ret = proc.prepare(str(tmp_path / "ep.mkv"), "ja")
+    assert arq_trab is not None
+    assert idioma_ret == "ja"
+    mock_motor_cls.assert_called_once_with(id_modelo="medium")
+
+
+def test_v293_cli_force_whisper_nao_muta_preferencias_em_disco(tmp_path, capsys, mocker):
+    """CLI --force-whisper não deve chamar PreferenciasUsuario.definir e deve propagar ConfiguracaoPipeline."""
+    from tradutor.contratos import ConfiguracaoPipeline
+
+    mkv_fake = tmp_path / "video.mkv"
+    mkv_fake.write_bytes(b"dummy")
+
+    spy_definir = mocker.patch.object(PreferenciasUsuario, "definir")
+    mocker.patch.object(GerenciadorConfig, "check_dependencies", return_value=True)
+
+    kwargs_capturados = {}
+    mock_proc = MagicMock()
+    mock_proc.process.return_value = True
+    mock_proc.ultimo_idioma_detectado = "jpn"
+    mock_proc.ultimos_caminhos_saida = {"video": str(tmp_path / "video_PT.mkv"), "legenda": None}
+
+    def fake_get_processor(*args, **kwargs):
+        kwargs_capturados.update(kwargs)
+        return mock_proc
+
+    mocker.patch("tradutor.estrategias.fabrica.FabricaProcessadores.get_processor", side_effect=fake_get_processor)
+
+    ret = executar_cli(["--headless", "-i", str(mkv_fake), "-d", "pt", "--force-whisper", "--json"])
+    assert ret == CodigoSaidaCli.SUCESSO
+    assert spy_definir.call_count == 0
+    cfg = kwargs_capturados.get("config")
+    assert isinstance(cfg, ConfiguracaoPipeline)
+    assert cfg.forcar_whisper is True
+    assert cfg.habilitar_whisper is True
+
+
+def test_v293_cli_tolera_stdout_stderr_none(tmp_path, monkeypatch, mocker):
+    """CLI deve executar sem AttributeError quando sys.stdout e sys.stderr forem None (--windowed)."""
+    srt_fake = tmp_path / "legenda.srt"
+    srt_fake.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+
+    mock_proc = MagicMock()
+    mock_proc.process.return_value = True
+    mock_proc.ultimo_idioma_detectado = "eng"
+    mock_proc.ultimos_caminhos_saida = {"video": None, "legenda": str(tmp_path / "legenda_PT.srt")}
+    mocker.patch("tradutor.estrategias.fabrica.FabricaProcessadores.get_processor", return_value=mock_proc)
+
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    ret = executar_cli(["--headless", "-i", str(srt_fake), "-d", "pt", "--json"])
+    assert ret == CodigoSaidaCli.SUCESSO
+
+
+def test_v293_orquestrador_compartilha_mesma_instancia_cache_na_fila(tmp_path, mocker):
+    """O OrquestradorTraducoes deve instanciar CacheTraducoes uma única vez e injetá-lo em toda a fila."""
+    arq1 = str(tmp_path / "ep1.srt")
+    arq2 = str(tmp_path / "ep2.srt")
+    for p in (arq1, arq2):
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("1\n00:00:01,000 --> 00:00:02,000\nHello\n\n")
+
+    caches_injetados = []
+
+    class FakeServicoTraducao:
+        def __init__(self, logger, progress_callback, is_cancelled_callback=None, engine=None, video_filename=None, cache=None, **_kwargs):
+            caches_injetados.append(cache)
+
+        async def pipeline(self, origem, destino, idioma_preferido="auto", idioma_destino="pt"):
+            with open(destino, "w", encoding="utf-8") as f:
+                f.write("1\n00:00:01,000 --> 00:00:02,000\nOlá\n\n")
+            return True
+
+    mocker.patch("tradutor.estrategias.processador_base.ServicoTraducao", FakeServicoTraducao)
+
+    orq = OrquestradorTraducoes()
+    orq.set_callbacks(lambda _m: None, lambda _c, _t: None, lambda _n: True, lambda: None)
+    orq._is_running = True
+    orq._process_files([arq1, arq2], "en", "pt", True)
+
+    assert len(caches_injetados) == 2
+    assert caches_injetados[0] is not None
+    assert caches_injetados[0] is caches_injetados[1]
+
+
+def test_v293_processador_srt_mesmo_idioma_nao_loga_embutindo_transcrita(tmp_path, mocker):
+    """ProcessadorSrt com origem == destino não deve registrar mensagem falsa de embutir transcrição."""
+    srt = tmp_path / "Portugues.srt"
+    srt.write_text("1\n00:00:01,000 --> 00:00:02,000\nOlá\n\n", encoding="utf-8")
+
+    class FakeServico:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def pipeline(self, origem, destino, idioma_preferido="auto", idioma_destino="pt"):
+            with open(destino, "w", encoding="utf-8") as f:
+                f.write("1\n00:00:01,000 --> 00:00:02,000\nOlá\n\n")
+            return True
+
+    mocker.patch("tradutor.estrategias.processador_base.ServicoTraducao", FakeServico)
+
+    logs = []
+    proc = ProcessadorSrt(
+        log_cb=logs.append,
+        progress_cb=lambda *_: None,
+        ask_overwrite_cb=lambda _: True,
+        is_running_cb=lambda: True,
+        output_dir=str(tmp_path),
+    )
+    assert proc.process(str(srt), "por", "pt", True) is True
+    assert not any("Embutindo legenda transcrita" in msg for msg in logs)
+
+
+def test_v293_glossario_compila_regex_unica_preservando_golden_sha256(tmp_path):
+    """GerenciadorGlossario deve compilar uma única regex combinada em cache e preservar o SHA-256 Golden Master."""
+    import hashlib
+    import re
+    from tradutor.glossario import GerenciadorGlossario
+
+    arq_gloss = tmp_path / "glossario_vazio.txt"
+    arq_gloss.write_text("", encoding="utf-8")
+    gg = GerenciadorGlossario(filepath=str(arq_gloss))
+    gg.glossario_map = {
+        "The Force": "A Força",
+        "Hogwarts": "Hogwarts",
+        "Goku": "Goku",
+        "Master Chief": "Chief",
+    }
+
+    regex1, mapa1 = gg._obter_regex_termos()
+    assert isinstance(regex1, re.Pattern)
+    regex2, mapa2 = gg._obter_regex_termos()
+    assert regex1 is regex2
+    assert mapa1 is mapa2
+
+    gg.glossario_map["Naruto"] = "Naruto"
+    regex3, _ = gg._obter_regex_termos()
+    assert isinstance(regex3, re.Pattern)
+    assert regex3 is not regex1
+
+    gg.glossario_map.pop("Naruto")
+    texto_mascarado, _ = gg.apply_shield("The Force is strong with Goku in Hogwarts.")
+    assert texto_mascarado == " TKGLOSS0T  is strong with  TKGLOSS2T  in  TKGLOSS1T ."
+    assert hashlib.sha256(f"en_pt_{texto_mascarado}".encode("utf-8")).hexdigest() == (
+        "8cfd5a02f8169d7d28fff5c6dc8d4b1694f2be14350a015a2c599ee6607cd51b"
+    )
+
+
 
 

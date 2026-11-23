@@ -350,3 +350,63 @@ async def test_traduzir_texto_longo_acima_3500_caracteres_integridade_e_cache():
     assert resultado_cache == resultado
     assert len(motor.chamadas) == chamadas_antes  # Nenhuma chamada extra ao motor
 
+
+@pytest.mark.asyncio
+async def test_persistencia_em_lote_usa_put_many_uma_vez():
+    """Garante que blocos traduzidos em uma chamada são persistidos em transação única via put_many."""
+    class SpyCacheLote:
+        def __init__(self):
+            self.chamadas_put_many = 0
+            self.chamadas_put = 0
+            self.salvos = {}
+
+        def get_many(self, textos, src_lang, dest_lang):
+            return {}
+
+        def get(self, texto, src_lang, dest_lang):
+            return None
+
+        def put_many(self, itens, src_lang="auto", dest_lang="pt"):
+            self.chamadas_put_many += 1
+            self.salvos.update(itens)
+
+        def put(self, texto, src_lang, dest_lang, texto_traduzido):
+            self.chamadas_put += 1
+            self.salvos[texto] = texto_traduzido
+
+    spy = SpyCacheLote()
+    tradutor = TradutorTextosExtensos(
+        tradutor=MotorTraducaoFake(),
+        cache=spy,
+        limite_caracteres=30,
+    )
+    resultado = await tradutor.traduzir("Bloco um de teste.\n\nBloco dois de teste.", "en", "pt")
+
+    assert "[PT]" in resultado
+    assert spy.chamadas_put_many == 1
+    assert spy.chamadas_put == 0
+    assert len(spy.salvos) == 2
+
+
+@pytest.mark.asyncio
+async def test_cache_persiste_bloco_legitimamente_identico_ao_original():
+    """Blocos cuja tradução legítima é idêntica ao original também devem ser cacheados."""
+    class MotorEco(ITradutor):
+        def __init__(self):
+            self.chamadas = []
+
+        def translate(self, text: str, src_lang: str, dest_lang: str) -> str:
+            self.chamadas.append((text, src_lang, dest_lang))
+            return text
+
+    motor = MotorEco()
+    cache = CacheFake()
+    tradutor = TradutorTextosExtensos(tradutor=motor, cache=cache)
+
+    assert await tradutor.traduzir("Naruto", "en", "pt") == "Naruto"
+    assert len(motor.chamadas) == 1
+    assert cache.get("Naruto", "en", "pt") == "Naruto"
+
+    assert await tradutor.traduzir("Naruto", "en", "pt") == "Naruto"
+    assert len(motor.chamadas) == 1
+
