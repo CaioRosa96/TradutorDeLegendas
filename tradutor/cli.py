@@ -11,7 +11,7 @@ from enum import IntEnum
 from typing import Optional, Sequence
 
 from .config import GerenciadorConfig
-from .config_usuario import PreferenciasUsuario
+from .contratos import ConfiguracaoPipeline
 from .estrategias.fabrica import FabricaProcessadores
 from .idiomas import Idiomas
 from .logger import app_logger
@@ -95,15 +95,17 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
     def log(msg: str) -> None:
         app_logger.info(msg)
         if json_output:
-            sys.stderr.write(str(msg) + "\n")
-            sys.stderr.flush()
-        else:
+            if sys.stderr is not None:
+                sys.stderr.write(str(msg) + "\n")
+                sys.stderr.flush()
+        elif sys.stdout is not None:
             print(msg)
 
     def responder(resultado: ResultadoExecucaoCli) -> int:
         if json_output:
-            sys.stdout.write(json.dumps(asdict(resultado), ensure_ascii=False) + "\n")
-            sys.stdout.flush()
+            if sys.stdout is not None:
+                sys.stdout.write(json.dumps(asdict(resultado), ensure_ascii=False) + "\n")
+                sys.stdout.flush()
         else:
             log(f"Status: {resultado.status} (Exit Code: {resultado.exit_code})")
             if resultado.error_message:
@@ -241,11 +243,16 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
         except Exception as e:
             log(f"[AVISO] Falha ao auto-alimentar glossario: {e}")
 
-    # 6. Execucao do processador
-    orig_forcar = PreferenciasUsuario.obter("forcar_transcricao", False)
-    if getattr(args, "force_whisper", False):
-        PreferenciasUsuario.definir("forcar_transcricao", True)
-        args.enable_whisper = True
+    # 6. Execucao do processador sem mutar preferencias.json em disco
+    config_cli = ConfiguracaoPipeline(
+        idioma_destino=dest_norm,
+        idioma_origem=src_norm,
+        politica_sobrescrita="sobrescrever" if args.overwrite else "pular",
+        formato_saida_video="converter_mkv",
+        manter_legenda_externa=bool(args.keep_external_sub),
+        habilitar_whisper=bool(args.enable_whisper),
+        forcar_whisper=bool(getattr(args, "force_whisper", False)),
+    )
 
     try:
         processador = FabricaProcessadores.get_processor(
@@ -257,6 +264,7 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
             ask_whisper_cb=lambda _: bool(args.enable_whisper),
             ask_output_format_cb=lambda *_: "converter_mkv",
             output_dir=args.output_dir,
+            config=config_cli,
         )
 
         sucesso = processador.process(
@@ -351,6 +359,3 @@ def executar_cli(args_list: Optional[Sequence[str]] = None) -> int:
                 error_message=str(e),
             )
         )
-    finally:
-        if getattr(args, "force_whisper", False):
-            PreferenciasUsuario.definir("forcar_transcricao", orig_forcar)

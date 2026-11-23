@@ -2,6 +2,7 @@ import os
 import time
 import threading
 
+from .cache import CacheTraducoes
 from .config import GerenciadorConfig
 from .contratos import ConfiguracaoPipeline, InteracaoUsuarioPort
 from .estrategias import FabricaProcessadores
@@ -94,6 +95,7 @@ class OrquestradorTraducoes:
         threading.Thread(
             target=self._process_files,
             args=(copia_fila, idioma_origem, idioma_destino, manter_legenda),
+            kwargs={"config": config} if config is not None else {},
             daemon=True,
         ).start()
         return True
@@ -113,7 +115,14 @@ class OrquestradorTraducoes:
                         return True
         return False
 
-    def _process_files(self, files, idioma_origem, idioma_destino, manter_legenda):
+    def _process_files(
+        self,
+        files,
+        idioma_origem,
+        idioma_destino,
+        manter_legenda,
+        config: ConfiguracaoPipeline | None = None,
+    ):
         """Loop principal de processamento em lote."""
         log = self._callbacks.get('log', print)
         ask_overwrite = self._callbacks.get('ask_overwrite', lambda x: False)
@@ -142,6 +151,7 @@ class OrquestradorTraducoes:
             log("=" * 60)
 
             engine_compartilhado = MotorTraducaoGoogle(max_retries=GerenciadorConfig.MAX_RETENTATIVAS)
+            cache_compartilhado = CacheTraducoes()
 
             for index, origem in enumerate(fila_inicial, 1):
                 if not self._is_running:
@@ -166,6 +176,8 @@ class OrquestradorTraducoes:
                         ask_whisper_cb=ask_whisper,
                         ask_output_format_cb=ask_output_format,
                         ask_dependencies_cb=ask_dependencies,
+                        cache=cache_compartilhado,
+                        config=config,
                     )
                     resultado = processador.process(origem, idioma_origem, idioma_destino, manter_legenda)
 

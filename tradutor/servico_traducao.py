@@ -30,6 +30,7 @@ class ServicoTraducao:
         engine=None,
         video_filename=None,
         habilitar_auto_alimentar=None,
+        cache=None,
     ):
         self._logger = logger
         self._progress_callback = progress_callback
@@ -46,7 +47,7 @@ class ServicoTraducao:
             video_filename=video_filename,
             habilitar_auto_alimentar=habilitar_auto_alimentar,
         )
-        self._cache = CacheTraducoes()
+        self._cache = cache if cache is not None else CacheTraducoes()
         
         if engine is None:
             raise ValueError("Um motor de tradução (ITradutor) deve ser fornecido.")

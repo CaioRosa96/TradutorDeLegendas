@@ -4,6 +4,7 @@ import asyncio
 from abc import ABC, abstractmethod
 
 from ..config import GerenciadorConfig
+from ..contratos import ConfiguracaoPipeline
 from ..servico_traducao import ServicoTraducao
 from ..tradutores import MotorTraducaoGoogle
 from ..idiomas import Idiomas
@@ -27,6 +28,8 @@ class ProcessadorArquivoBase(ABC):
         ask_output_format_cb=None,
         ask_dependencies_cb=None,
         output_dir=None,
+        cache=None,
+        config: ConfiguracaoPipeline | None = None,
     ):
         self.log = log_cb
         self.update_progress = progress_cb
@@ -37,6 +40,8 @@ class ProcessadorArquivoBase(ABC):
         self.ask_output_format = ask_output_format_cb
         self.ask_dependencies = ask_dependencies_cb
         self.output_dir = output_dir
+        self.cache = cache
+        self.config = config
         self.ultimos_caminhos_saida: dict[str, str | None] = {}
         self.ultimo_idioma_detectado: str | None = None
 
@@ -69,8 +74,10 @@ class ProcessadorArquivoBase(ABC):
                 self.log(f"-> Origem e destino iguais ({src_google}). Arquivo pulado.")
                 self.cleanup_temporary(arq_trabalho)
                 return False
-            else:
+            elif self.deve_copiar_sem_traduzir():
                 self.log(f"[INFO] Origem e destino iguais ({src_google}). Embutindo legenda transcrita diretamente.")
+            else:
+                self.log(f"[INFO] Origem declarada igual ao destino ({src_google}). Prosseguindo com tradução da legenda avulsa.")
 
         # 3. Resolução de Caminhos de Saída
         caminhos_saida = self.get_output_paths(origem, idioma_destino, arq_trabalho)
@@ -98,6 +105,7 @@ class ProcessadorArquivoBase(ABC):
                     is_cancelled_callback=lambda: not self.is_running(),
                     engine=engine,
                     video_filename=os.path.basename(origem),
+                    cache=self.cache,
                 )
                 sucesso_trad = asyncio.run(
                     translator_svc.pipeline(arq_trabalho, caminho_legenda_final, idioma_real, idioma_destino)
@@ -163,7 +171,7 @@ class ProcessadorArquivoBase(ABC):
                 pass
 
     def _check_conflicts(self, caminhos_saida: dict, arq_trabalho: str) -> bool:
-        """Verifica se os arquivos de saída já existem e pede confirmação ao usuário."""
+        """Verifica se os arquivos de saída já existem e respeita a política configurada."""
         conflitos = [
             os.path.basename(p)
             for p in caminhos_saida.values()
@@ -172,6 +180,15 @@ class ProcessadorArquivoBase(ABC):
 
         if conflitos:
             nomes = ", ".join(conflitos)
+            if self.config is not None:
+                if self.config.politica_sobrescrita == "sobrescrever":
+                    self.log(f"-> Sobrescrita automática conforme política configurada ({nomes}).")
+                    return True
+                if self.config.politica_sobrescrita == "pular":
+                    self.log(f"-> Arquivo pulado conforme política de sobrescrita ({nomes}).")
+                    self.cleanup_temporary(arq_trabalho)
+                    return False
+
             self.log(f"Aguardando confirmação para sobrescrever: {nomes}...")
             if not self.ask_overwrite(nomes):
                 self.log("-> Arquivo pulado pelo usuário (não sobrescrever).")

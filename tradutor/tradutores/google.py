@@ -40,7 +40,7 @@ class MotorTraducaoGoogle(ITradutor):
         """Propriedade de compatibilidade que retorna o cliente isolado da thread atual."""
         return self._get_engine()
 
-    def _check_circuit(self):
+    def _check_circuit(self) -> bool:
         deve_logar_half_open = False
         with self._lock:
             if self._is_open:
@@ -56,6 +56,15 @@ class MotorTraducaoGoogle(ITradutor):
                 raise ExcecaoDisjuntorAberto("Circuit Breaker HALF-OPEN: Sonda em andamento.")
         if deve_logar_half_open:
             app_logger.info("Circuit Breaker: Testando recuperação da API (Half-Open).")
+        return deve_logar_half_open
+
+    def _liberar_sonda_interrompida(self) -> None:
+        """Libera a trava de sonda Half-Open caso uma exceção inesperada ocorra antes de registrar desfecho."""
+        with self._lock:
+            if self._sonda_half_open_ativa:
+                self._sonda_half_open_ativa = False
+                self._is_open = True
+                self._last_failure_time = time.time()
 
     def _record_failure(self):
         deve_logar_erro = False
@@ -81,30 +90,37 @@ class MotorTraducaoGoogle(ITradutor):
             app_logger.info("Circuit Breaker: Conexão estabilizada. Resetando falhas.")
 
     def translate(self, text: str, src_lang: str, dest_lang: str) -> str:
-        self._check_circuit()
-
-        # Sanitizacao defensiva do idioma de destino
+        # Sanitizacao defensiva do idioma de destino antes de adquirir sonda do disjuntor
         dest_efetivo = Idiomas.normalizar_destino(dest_lang) or Idiomas.para_google(dest_lang)
         if not dest_efetivo or dest_efetivo == "auto":
             raise ValueError(f"Idioma de destino invalido para o Google Translate: '{dest_lang}'")
         dest_lang = dest_efetivo
-        
-        for tentativa in range(self._max_retries):
-            try:
-                resposta = self._engine.translate(text, src=src_lang, dest=dest_lang)
-                if resposta is None or getattr(resposta, "text", None) is None:
-                    raise RuntimeError("Resposta vazia retornada pela API do Google.")
-                self._record_success()
-                return resposta.text
 
-            except (TypeError, ValueError, AttributeError) as e:
-                self._record_failure()
-                app_logger.error(f"Erro permanente na API do Google: {e}")
-                raise RuntimeError(f"Erro permanente na API do Google: {e}")
-            except Exception as e:
-                if tentativa == self._max_retries - 1:
+        sonda_adquirida = self._check_circuit()
+        concluido = False
+        try:
+            for tentativa in range(self._max_retries):
+                try:
+                    resposta = self._engine.translate(text, src=src_lang, dest=dest_lang)
+                    if resposta is None or getattr(resposta, "text", None) is None:
+                        raise RuntimeError("Resposta vazia retornada pela API do Google.")
+                    self._record_success()
+                    concluido = True
+                    return resposta.text
+
+                except (TypeError, ValueError, AttributeError) as e:
                     self._record_failure()
-                    raise RuntimeError(f"Falha no Google após {self._max_retries} tentativas: {e}")
-                
-                app_logger.warning(f"Google API falhou. Retentando em breve... Erro: {e}")
-                time.sleep(2 ** tentativa)
+                    concluido = True
+                    app_logger.error(f"Erro permanente na API do Google: {e}")
+                    raise RuntimeError(f"Erro permanente na API do Google: {e}")
+                except Exception as e:
+                    if tentativa == self._max_retries - 1:
+                        self._record_failure()
+                        concluido = True
+                        raise RuntimeError(f"Falha no Google após {self._max_retries} tentativas: {e}")
+
+                    app_logger.warning(f"Google API falhou. Retentando em breve... Erro: {e}")
+                    time.sleep((2 ** tentativa) + random.uniform(0.0, 0.5))
+        finally:
+            if sonda_adquirida and not concluido:
+                self._liberar_sonda_interrompida()

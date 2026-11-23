@@ -21,6 +21,8 @@ class FabricaProcessadores:
         ask_dependencies_cb=None,
         output_dir=None,
         manipulador_midia=None,
+        cache=None,
+        config=None,
     ):
         ext = filepath.lower()
         if ext.endswith(FabricaProcessadores.EXTENSOES_VIDEO):
@@ -35,6 +37,8 @@ class FabricaProcessadores:
                 ask_dependencies_cb=ask_dependencies_cb,
                 output_dir=output_dir,
                 manipulador_midia=manipulador_midia,
+                cache=cache,
+                config=config,
             )
         elif ext.endswith(FabricaProcessadores.EXTENSOES_LEGENDA):
             return ProcessadorSrt(
@@ -47,6 +51,8 @@ class FabricaProcessadores:
                 ask_output_format_cb=ask_output_format_cb,
                 ask_dependencies_cb=ask_dependencies_cb,
                 output_dir=output_dir,
+                cache=cache,
+                config=config,
             )
         else:
             raise ValueError(f"Formato não suportado pela Fábrica: {filepath}")

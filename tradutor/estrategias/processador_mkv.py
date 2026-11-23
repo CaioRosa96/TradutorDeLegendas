@@ -82,7 +82,11 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         destino_dir = self.output_dir or os.path.dirname(origem)
         if destino_dir:
             os.makedirs(destino_dir, exist_ok=True)
-        forcar_whisper = bool(PreferenciasUsuario.obter("forcar_transcricao", False))
+        forcar_whisper = (
+            bool(self.config.forcar_whisper)
+            if self.config is not None
+            else bool(PreferenciasUsuario.obter("forcar_transcricao", False))
+        )
 
         if not forcar_whisper:
             self.log(f"[Etapa 1/3] Extração de Mídia via MKVToolNix (Idioma: {idioma_origem or 'Qualquer'})")
@@ -97,9 +101,15 @@ class ProcessadorMkv(ProcessadorArquivoBase):
                     if not self.ask_whisper(nome_arq):
                         self.log("-> Transcrição por IA local recusada pelo usuário. Vídeo pulado.")
                         return None, None
-                elif not PreferenciasUsuario.obter("transcricao_habilitada", False):
-                    self.log("[AVISO] Vídeo sem legendas embutidas e transcrição de áudio desativada.")
-                    raise erro_sem_legenda
+                else:
+                    transcricao_hab = (
+                        bool(self.config.habilitar_whisper)
+                        if self.config is not None
+                        else bool(PreferenciasUsuario.obter("transcricao_habilitada", False))
+                    )
+                    if not transcricao_hab:
+                        self.log("[AVISO] Vídeo sem legendas embutidas e transcrição de áudio desativada.")
+                        raise erro_sem_legenda
 
                 self.log("[INFO] Permissão concedida. Acionando transcrição de áudio via IA local (Whisperfile)...")
 
@@ -108,7 +118,8 @@ class ProcessadorMkv(ProcessadorArquivoBase):
 
     def _transcrever_audio_mkv(self, origem: str, destino_dir: str, idioma_origem: str):
         """Extrai o áudio do MKV, executa o Whisperfile e retorna o caminho do .srt temporário."""
-        motor_whisper = MotorWhisperfile()
+        id_modelo = self.config.modelo_whisper_padrao if self.config is not None else None
+        motor_whisper = MotorWhisperfile(id_modelo=id_modelo)
         if not motor_whisper.esta_disponivel():
             raise RuntimeError(
                 "Transcrição de áudio autorizada, mas o binário Whisperfile não foi encontrado em bin/ ou mkvtoolnix/."
@@ -165,6 +176,9 @@ class ProcessadorMkv(ProcessadorArquivoBase):
         ext_video = os.path.splitext(origem)[1].lower()
         if ext_video == ".mkv":
             return "converter_mkv"
+
+        if self.config is not None and self.config.formato_saida_video in ("converter_mkv", "manter_original"):
+            return self.config.formato_saida_video
 
         politica = PreferenciasUsuario.obter("formato_saida_video", "perguntar")
         if politica == "perguntar" and self.ask_output_format is not None:
