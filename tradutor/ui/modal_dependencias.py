@@ -152,8 +152,9 @@ class ModalDependencias(ctk.CTkToplevel):
         self._cancelado = False
         self.btn_baixar.configure(state="disabled")
         self.btn_outra_pasta.configure(state="disabled")
+        self.barra_progresso.configure(mode="indeterminate")
         self.barra_progresso.pack(fill="x", padx=20, pady=(0, 6), before=self.lbl_status)
-        self.barra_progresso.set(0)
+        self.barra_progresso.start()
         self.lbl_status.configure(
             text=I18n.t("lbl_dep_instalando_winget"),
             text_color=CORES["destaque_azul"],
@@ -195,6 +196,11 @@ class ModalDependencias(ctk.CTkToplevel):
         self._baixando = False
         if not self.winfo_exists():
             return
+        try:
+            self.barra_progresso.stop()
+            self.barra_progresso.pack_forget()
+        except Exception:
+            pass
         if sucesso:
             self.lbl_status.configure(
                 text=I18n.t("lbl_dep_sucesso").format(caminho),
@@ -215,6 +221,10 @@ class ModalDependencias(ctk.CTkToplevel):
 
     def _ao_cancelar(self):
         self._cancelado = True
+        try:
+            self.barra_progresso.stop()
+        except Exception:
+            pass
         self._finalizar(False)
 
     def _finalizar(self, resolvido: bool):

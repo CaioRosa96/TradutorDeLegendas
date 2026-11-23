@@ -1,11 +1,9 @@
-"""Servico de diagnostico, vinculacao de pasta customizada e download sob demanda do MKVToolNix/FFmpeg."""
+"""Servico de diagnostico, vinculacao de pasta customizada e instalacao via winget para MKVToolNix/FFmpeg."""
 
 from dataclasses import dataclass
 import os
 import shutil
 import subprocess
-import zipfile
-import requests
 
 from .config import GerenciadorConfig
 from .config_usuario import PreferenciasUsuario
@@ -22,11 +20,8 @@ class StatusDependencias:
 
 
 class InstaladorDependencias:
-    """Gerencia a resolucao, validacao de pasta externa e download sob demanda de binarios GPLv2."""
+    """Gerencia a resolucao, validacao de pasta externa e instalacao oficial de binarios GPLv2."""
 
-    URL_PACOTE_PORTATIL = (
-        "https://github.com/CaioRosa96/TradutorDeLegendas/releases/latest/download/mkvtoolnix-portable-win64.zip"
-    )
     URL_PAGINA_OFICIAL_MKVTOOLNIX = "https://mkvtoolnix.download/downloads.html#windows"
     WINGET_ID_MKVTOOLNIX = "MoritzBunkus.MKVToolNix"
 
@@ -63,24 +58,6 @@ class InstaladorDependencias:
         return os.path.join(GerenciadorConfig.DIRETORIO_EXECUCAO, "mkvtoolnix")
 
     @classmethod
-    def _extrair_executaveis_zip(cls, caminho_zip: str, pasta_destino: str):
-        """Extrai mkvmerge.exe, mkvextract.exe e ffmpeg.exe (se presentes) de um arquivo .zip."""
-        alvos = {"mkvmerge.exe", "mkvextract.exe", "ffmpeg.exe"}
-        os.makedirs(pasta_destino, exist_ok=True)
-
-        with zipfile.ZipFile(caminho_zip, "r") as zf:
-            for membro in zf.infolist():
-                nome_base = os.path.basename(membro.filename).lower()
-                if nome_base in alvos and not membro.is_dir():
-                    destino_bin = os.path.join(pasta_destino, nome_base)
-                    destino_temp = f"{destino_bin}.part"
-                    with zf.open(membro) as origem_f, open(destino_temp, "wb") as dest_f:
-                        shutil.copyfileobj(origem_f, dest_f)
-                    if os.path.exists(destino_bin):
-                        os.remove(destino_bin)
-                    os.replace(destino_temp, destino_bin)
-
-    @classmethod
     def _instalar_via_winget(cls) -> bool:
         """Tenta instalar o MKVToolNix silenciosamente via Windows Package Manager (winget)."""
         if not shutil.which("winget"):
@@ -112,47 +89,21 @@ class InstaladorDependencias:
         cls,
         progresso_cb=None,
         cancelado_cb=None,
-        url_pacote: str | None = None,
     ) -> str:
-        """Baixa o pacote portatil para mkvtoolnix/ ou aciona fallback via winget."""
-        pasta_destino = cls.obter_pasta_destino_local()
-        os.makedirs(pasta_destino, exist_ok=True)
-        arquivo_zip_temp = os.path.join(pasta_destino, "mkvtoolnix_portable.zip.part")
-        url_alvo = url_pacote or cls.URL_PACOTE_PORTATIL
+        """Instala o MKVToolNix sob demanda via winget (fonte oficial GPLv2 sem redistribuicao no .exe)."""
+        if cancelado_cb and cancelado_cb():
+            raise InterruptedError("Instalacao cancelada pelo usuario.")
 
-        try:
-            with requests.get(url_alvo, stream=True, timeout=60) as resp:
-                resp.raise_for_status()
-                total_bytes = int(resp.headers.get("content-length", 0))
-                baixados = 0
+        if GerenciadorConfig.check_dependencies():
+            return GerenciadorConfig.get_mkvtoolnix_path()
 
-                with open(arquivo_zip_temp, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=1024 * 256):
-                        if cancelado_cb and cancelado_cb():
-                            raise InterruptedError("Download cancelado pelo usuario.")
-                        if chunk:
-                            f.write(chunk)
-                            baixados += len(chunk)
-                            if progresso_cb and total_bytes > 0:
-                                progresso_cb(baixados, total_bytes)
+        if cls._instalar_via_winget():
+            if cancelado_cb and cancelado_cb():
+                raise InterruptedError("Instalacao cancelada pelo usuario.")
+            return GerenciadorConfig.get_mkvtoolnix_path()
 
-            cls._extrair_executaveis_zip(arquivo_zip_temp, pasta_destino)
-            if GerenciadorConfig.check_dependencies():
-                return GerenciadorConfig.get_mkvtoolnix_path()
-        except InterruptedError:
-            raise
-        except Exception as erro_http:
-            if cls._instalar_via_winget():
-                return GerenciadorConfig.get_mkvtoolnix_path()
-            raise RuntimeError(
-                f"Nao foi possivel baixar automaticamente o MKVToolNix ({erro_http})."
-            ) from erro_http
-        finally:
-            if os.path.exists(arquivo_zip_temp):
-                try:
-                    os.remove(arquivo_zip_temp)
-                except OSError:
-                    pass
-
-        raise RuntimeError("Os executaveis mkvmerge.exe e mkvextract.exe nao foram encontrados apos o download.")
+        raise RuntimeError(
+            "Nao foi possivel instalar o MKVToolNix automaticamente via winget. "
+            f"Baixe manualmente em {cls.URL_PAGINA_OFICIAL_MKVTOOLNIX} ou selecione a pasta existente."
+        )
 
