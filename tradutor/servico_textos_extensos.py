@@ -100,6 +100,7 @@ class TradutorTextosExtensos:
 
         suporta_lote = self._cache is not None and hasattr(self._cache, "get_many")
         cache_map = self._obter_cache_em_lote(blocos, src_norm, dest_norm) if suporta_lote else {}
+        novos_para_cache: dict[str, str] = {}
 
         async def _processar_bloco(bloco: str) -> str:
             nonlocal concluidos
@@ -124,8 +125,8 @@ class TradutorTextosExtensos:
                 traduzido, sucesso_total = await self._executar_com_fallback(
                     loop, bloco, src_norm, dest_norm
                 )
-                if sucesso_total and not self._is_cancelled() and traduzido != bloco:
-                    self._persistir_cache_unitario(bloco, src_norm, dest_norm, traduzido)
+                if sucesso_total and not self._is_cancelled():
+                    novos_para_cache[bloco] = traduzido
 
                 concluidos += 1
                 self._progress_callback(concluidos, total_blocos)
@@ -133,6 +134,9 @@ class TradutorTextosExtensos:
 
         tasks = [_processar_bloco(b) for b in blocos]
         blocos_traduzidos = await asyncio.gather(*tasks)
+
+        if novos_para_cache and not self._is_cancelled():
+            self._persistir_cache_em_lote(novos_para_cache, src_norm, dest_norm)
 
         return self._particionador.recompor_texto(texto, blocos, blocos_traduzidos)
 
@@ -167,6 +171,22 @@ class TradutorTextosExtensos:
                 self._cache.put(bloco, src_lang, dest_lang, traduzido)
             except Exception as e:
                 self._logger(f"[Aviso] Falha ao persistir no cache: {e}")
+
+    def _persistir_cache_em_lote(
+        self, itens: dict[str, str], src_lang: str, dest_lang: str
+    ) -> None:
+        """Persiste múltiplos blocos traduzidos em uma única transação quando put_many estiver disponível."""
+        if self._cache is None or not itens:
+            return
+        if hasattr(self._cache, "put_many"):
+            try:
+                self._cache.put_many(itens, src_lang, dest_lang)
+                return
+            except Exception as e:
+                self._logger(f"[Aviso] Falha ao persistir lote no cache: {e}")
+                return
+        for bloco, trad in itens.items():
+            self._persistir_cache_unitario(bloco, src_lang, dest_lang, trad)
 
     async def _executar_com_fallback(
         self,

@@ -122,21 +122,29 @@ class GerenciadorGlossario:
         r'(?i)\bT[ \t]*K[ \t]*G[ \t]*L[ \t]*O[ \t]*S[ \t]*S[ \t]*(\d+)[ \t]*T\b'
     )
 
-    def _obter_padroes_termos(self):
-        """Retorna lista de (pattern, key) pré-compilados em ordem decrescente de tamanho."""
+    def _obter_regex_termos(self):
+        """Retorna (regex_combinada, mapa_termos) pre-compilados em passagem unica.
+
+        `mapa_termos` mapeia chave em minusculas -> (ordem_prioridade_tamanho, valor_destino),
+        permitindo atribuir tokens na mesma ordem deterministica do legado (preservando SHA-256).
+        """
         assinatura = tuple(self.glossario_map.items())
         if getattr(self, "_assinatura_regex", None) != assinatura:
             if not self.glossario_map:
-                self._padroes_termos = []
+                self._regex_combinada = None
+                self._mapa_termos = {}
             else:
-                sorted_keys = sorted(self.glossario_map.keys(), key=len, reverse=True)
-                self._padroes_termos = [
-                    (re.compile(rf'(?i)(?<!\w){re.escape(k)}(?!\w)'), k)
-                    for k in sorted_keys
-                    if k
-                ]
+                chaves_ordenadas = [k for k in sorted(self.glossario_map.keys(), key=len, reverse=True) if k]
+                alternativas = "|".join(re.escape(k) for k in chaves_ordenadas)
+                self._regex_combinada = (
+                    re.compile(rf'(?i)(?<!\w)(?:{alternativas})(?!\w)') if alternativas else None
+                )
+                mapa_termos = {}
+                for ordem, k in enumerate(chaves_ordenadas):
+                    mapa_termos.setdefault(k.lower(), (ordem, self.glossario_map[k]))
+                self._mapa_termos = mapa_termos
             self._assinatura_regex = assinatura
-        return self._padroes_termos
+        return self._regex_combinada, self._mapa_termos
 
     def apply_shield(self, text):
         """Aplica o escudo substituindo termos e tags de formatação por tokens."""
@@ -158,16 +166,33 @@ class GerenciadorGlossario:
 
             shielded_text, _ = self._PADRAO_TAGS_FORMATACAO.subn(repl_tag, shielded_text)
 
-        padroes = self._obter_padroes_termos()
-        for pattern, key in padroes:
-            def repl(match):
-                nonlocal counter
-                token = f"TKGLOSS{counter}T"
-                mapping[token] = self.glossario_map[key]
-                counter += 1
-                return f" {token} "
+        regex_termos, mapa_termos = self._obter_regex_termos()
+        if regex_termos is not None:
+            matches = list(regex_termos.finditer(shielded_text))
+            if matches:
+                itens = []
+                for idx_m, m in enumerate(matches):
+                    info = mapa_termos.get(m.group(0).lower())
+                    ordem = info[0] if info is not None else len(mapa_termos)
+                    valor = info[1] if info is not None else m.group(0)
+                    itens.append((ordem, m.start(), idx_m, valor))
 
-            shielded_text, _ = pattern.subn(repl, shielded_text)
+                itens.sort(key=lambda it: (it[0], it[1]))
+                tokens_por_match: dict[int, str] = {}
+                for _, _, idx_m, valor in itens:
+                    token = f"TKGLOSS{counter}T"
+                    mapping[token] = valor
+                    tokens_por_match[idx_m] = token
+                    counter += 1
+
+                partes = []
+                pos = 0
+                for idx_m, m in enumerate(matches):
+                    partes.append(shielded_text[pos:m.start()])
+                    partes.append(f" {tokens_por_match[idx_m]} ")
+                    pos = m.end()
+                partes.append(shielded_text[pos:])
+                shielded_text = "".join(partes)
 
         return shielded_text, mapping
 
