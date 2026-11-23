@@ -1,7 +1,7 @@
 """Script de automação de build para compilar as versões Moderna e Clássica em .exe.
 
 Utiliza o PyInstaller para empacotar o aplicativo de forma reprodutiva e organizada,
-copiando dependências de dados (locales, glossários e mkvtoolnix portátil).
+copiando dependências de dados (locales e glossários).
 """
 
 import argparse

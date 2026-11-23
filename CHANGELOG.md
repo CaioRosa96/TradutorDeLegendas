@@ -4,25 +4,31 @@ Todas as mudanças relevantes deste projeto são documentadas neste arquivo, seg
 
 ---
 
-## [2.9.3] - 2026-11-18
+## [2.9.3] - 2026-11-22
 
 ### Adicionado
-- Suite de testes de regressão cobrindo orçamento de caracteres, integridade de cancelamento com preservação de legendas pré-existentes, sonda única Half-Open e cache unificado.
+- Suíte de testes de regressão cobrindo orçamento de caracteres, integridade de cancelamento com preservação de legendas pré-existentes, sonda única Half-Open, jitter no backoff, propagação integral de `ConfiguracaoPipeline`, isolamento do CLI sem gravação em disco, compartilhamento de cache na fila e persistência em lote de textos extensos.
 - Proteção anti-exclusão acidental (`_limpar_legenda_intermediaria`) que preserva arquivos de legenda pré-existentes do usuário quando a operação é cancelada ou falha.
 - Propriedade pública `delimitadores` em `ParticionadorTexto` e método gancho `deve_copiar_sem_traduzir()` em `ProcessadorArquivoBase`.
 
 ### Modificado
 - Fatiamento de lotes com duplo critério no `ServicoTraducao` respeitando simultaneamente limite de linhas e teto de caracteres (`3500 chars`).
 - Escrita de arquivo de legenda traduzido promovida via gravação temporária atômica (`os.replace`) com preservação de extensão.
-- Controle de concorrência no `MotorTraducaoGoogle`: sonda única em estado Half-Open sob lock para evitar Thundering Herd de threads simultâneas.
+- Controle de concorrência no `MotorTraducaoGoogle`: sonda única em estado Half-Open sob lock com validação prévia de destino, liberação garantida em `finally` e backoff exponencial com jitter.
+- Propagação integral dos parâmetros de `ConfiguracaoPipeline` pelo `OrquestradorTraducoes` e `FabricaProcessadores` até `ProcessadorArquivoBase` e `ProcessadorMkv`, eliminando a mutação de `preferencias.json` no CLI (`--force-whisper`).
+- Compartilhamento da instância de `CacheTraducoes` entre todos os arquivos da fila no `OrquestradorTraducoes` e remoção de atributos não utilizados em `CacheTraducoes`.
 - Otimização do fallback em lote no `ServicoTraducao`: isolamento de linhas pendentes em acertos parciais e eliminação de pausas desnecessárias em hits de cache.
-- Otimização de performance de CPU no `GerenciadorGlossario`: unificação e pré-compilação de expressão regular combinada para termos de glossário com restauração em passagem única.
-- Otimização de consultas no `TradutorTextosExtensos`: eliminação de leituras SQLite redundantes após hit no cache em lote.
+- Otimização de performance de CPU no `GerenciadorGlossario`: compilação unificada de expressão regular combinada para termos de glossário com preservação determinística dos hashes SHA-256 Golden Master e restauração em passagem única.
+- Persistência em lote via `put_many` no `TradutorTextosExtensos`, eliminação de leituras SQLite redundantes após `get_many` e suporte a cache de blocos legitimamente idênticos ao original.
 - Desacoplamento tardio (*lazy import*) de portas de mídia em `contratos.py` via `__getattr__`.
+- Instalação sob demanda do MKVToolNix em `InstaladorDependencias` simplificada para `winget` (`MoritzBunkus.MKVToolNix`) sem URL quebrada de pacote portátil, acompanhada de barra de progresso indeterminada no `ModalDependencias`.
 
 ### Corrigido
 - Formatação de espaços residuais no escudo de tags ao redor de marcações HTML/ASS e antes de pontuações de fim de sentença.
 - Anexação de pontuação de fechamento ao bloco particionado em `ParticionadorTexto`.
+- Travamento potencial da trava Half-Open no `MotorTraducaoGoogle` quando `dest_lang` inválido ou exceção ocorria antes do registro de resultado.
+- Proteção contra `AttributeError` no CLI headless (`tradutor/cli.py`) quando `sys.stdout` ou `sys.stderr` estiverem `None` em executáveis `--windowed`.
+- Mensagem de log para legendas avulsas (`ProcessadorSrt`) com idioma de origem igual ao destino, removendo a indicação incorreta de legenda transcrita.
 
 ---
 

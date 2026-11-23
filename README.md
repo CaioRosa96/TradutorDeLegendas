@@ -47,7 +47,7 @@ Se você deseja apenas utilizar o aplicativo sem instalar Python ou configurar a
 
 O projeto é estruturado segundo os princípios de separação de responsabilidades (MVC e Design Patterns):
 
-- **View (`tradutor/interface.py` e `tradutor/ui/`):** Interface gráfica inspirada no layout moderno do LosslessCut (painel lateral de parâmetros, fila com cards dinâmicos por arquivo, seletor de 4 temas com conformidade WCAG, modal de configurações e console de logs retrátil). A versão clássica permanece preservada em `tradutor/interface_classica.py`.
+- **View (`tradutor/interface.py` e `tradutor/ui/`):** Interface gráfica inspirada no layout moderno do LosslessCut (painel lateral de parâmetros, fila em grade tabular densa de 30px por arquivo, seletor de 4 temas com conformidade WCAG, modal de configurações e console de logs retrátil). A versão clássica permanece preservada em `tradutor/interface_classica.py`.
 - **Controller (`tradutor/controlador.py`):** Camada mediadora que processa comandos do usuário e sincroniza eventos entre a interface e as regras de negócio.
 - **Model / Orquestrador (`tradutor/orquestrador.py`):** Gerenciador de pipeline que coordena o fluxo em lote de forma desacoplada da interface gráfica.
 - **Estratégias (`tradutor/estrategias/`):** Aplicação do Strategy e Template Method via `FabricaProcessadores`, delegando a lógica especializada para `ProcessadorMkv` ou `ProcessadorSrt`.
@@ -92,7 +92,7 @@ python TradutorLegendas26.py
 
 ## Suíte de Testes e Qualidade
 
-O repositório possui cobertura de **337 testes unitários automatizados** com pytest, além de integração contínua (CI) e publicação automatizada de Releases via GitHub Actions.
+O repositório possui cobertura de **355 testes unitários automatizados** com pytest, além de integração contínua (CI) e publicação automatizada de Releases via GitHub Actions.
 
 ### Testes Unitários
 Os testes rodam de forma 100% offline, utilizando diretórios temporários e injeção de mocks:
@@ -102,17 +102,22 @@ pytest tests/unit/ -v
 Você também pode rodar os testes diretamente pelo script auxiliar **`testar.bat`**.
 
 **Cobertura dos testes:**
-- `test_contratos_escudo.py`: Imutabilidade de Value Objects (`LinhaProtegida`) e Golden Master SHA-256.
-- `test_glossario.py`: Tokenização reversível, preservação de tags ASS/HTML e siglas com pontuação (`U.A.`).
-- `test_disjuntor_google.py`: Concorrência do Circuit Breaker, transição half-open e isolamento `threading.local`.
+- `test_contratos_escudo.py`: Imutabilidade de Value Objects (`LinhaProtegida`, `ConfiguracaoPipeline`), porta `InteracaoUsuarioPort` e Golden Master SHA-256.
+- `test_glossario.py` e `test_glossario_port.py`: Tokenização reversível em regex combinada única, preservação de tags ASS/HTML, siglas com pontuação (`U.A.`) e porta `BuscadorEntidadesPort`.
+- `test_disjuntor_google.py`: Concorrência do Circuit Breaker, sonda Half-Open segura, jitter no backoff e isolamento `threading.local`.
 - `test_cache.py`: Operações SQLite WAL sob concorrência de 20 threads, `get_many` fatiado e `put_many` atômico.
 - `test_servico_traducao.py`: Simulação assíncrona da API, cache em dois níveis e fallback sequencial.
-- `test_transcritor_whisper.py`: Resolução de binário Whisperfile, conversão FFmpeg WAV 16 kHz e fallback MKV.
+- `test_servico_textos_extensos.py`: Particionamento hierárquico com orçamento de caracteres, fallback recursivo e persistência em lote via `put_many`.
+- `test_transcritor_whisper.py` e `test_repositorio_whisper.py`: Resolução de binário Whisperfile, catálogo de modelos com download atômico, conversão FFmpeg WAV 16 kHz e fallback MKV.
+- `test_manipulador_midia.py`: Contrato hexagonal `ManipuladorMidiaPort`, adaptador `AdaptadorMkvToolNixFFmpeg` e `FakeManipuladorMidia` determinístico.
+- `test_cli.py`: Interface de linha de comando headless (`--headless`), saída JSON (`--json`), `--force-whisper` sem mutação em disco e códigos de saída.
 - `test_alimentar_glossario.py`: Sanitização de nomes de arquivo e integração mockada com a API AniList.
-- `test_tema.py` e `test_config_e_modais.py`: Contraste matemático WCAG 2.x nos 4 temas, contrato de paridade de chaves e placeholders `{n}` nos 5 idiomas de i18n e modais.
+- `test_tema.py`, `test_config_e_modais.py` e `test_gerenciador_fila.py`: Contraste matemático WCAG 2.x nos 4 temas, contrato de paridade de chaves e placeholders `{n}` nos 5 idiomas de i18n, modais e fila pura desacoplada da UI.
 - `test_logger_atualizador_som.py`: Logger resiliente (retenção de 7 dias, teto de 20 MB e fallback `%LOCALAPPDATA%`), verificador semântico de atualizações (`VerificadorAtualizacao`) e síntese de áudio WAV PCM em memória (`gerar_wav_acorde_conclusao`).
-- `test_instalador_dependencias.py`: Prioridade de pasta customizada do usuário fora das pastas padrão, validação de diretórios, download portátil sob demanda e solicitação contextual do MKVToolNix.
+- `test_instalador_dependencias.py`: Prioridade de pasta customizada do usuário fora das pastas padrão, validação de diretórios, instalação sob demanda via `winget` e solicitação contextual do MKVToolNix.
 - `test_idiomas.py`: Conversão bidirecional entre códigos ISO-639-2 e códigos do Google Translate.
+- `test_versao.py` e `test_ponto_entrada.py`: Contrato SSOT de versão (`InfoVersao`) e ordem de inicialização dos pontos de entrada.
+- `test_boost_regressoes.py`: Suíte consolidada de regressões de concorrência, contratos imutáveis, cancelamento, CLI headless e integridade do pipeline.
 
 ### Teste E2E (End-to-End)
 Validação de pipelines completos de lote em ambiente controlado:

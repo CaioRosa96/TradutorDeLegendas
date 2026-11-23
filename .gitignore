@@ -374,6 +374,8 @@ AGENTS.md
 .agents/
 contexto/
 .contexto/
+contexto_gemini/
+gerar_contexto_gemini.py
 
 # Preferencias locais do usuario (configuracoes de UI)
 preferencias.json

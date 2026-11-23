@@ -17,17 +17,17 @@ class InfoVersao:
 
     @classmethod
     def tag(cls) -> str:
-        """Retorna a tag de versão com prefixo 'v' (ex.: 'v2.9.1')."""
+        """Retorna a tag de versão com prefixo 'v' (ex.: 'v2.9.3')."""
         return f"v{cls.NUMERO}"
 
     @classmethod
     def completa(cls) -> str:
-        """Retorna a versão acompanhada do nome da edição (ex.: 'v2.9.1 (Lossless Modern UI)')."""
+        """Retorna a versão acompanhada do nome da edição (ex.: 'v2.9.3 (Lossless Modern UI)')."""
         return f"v{cls.NUMERO} ({cls.NOME_EDICAO})"
 
     @classmethod
     def titulo_janela(cls, nome_app: str) -> str:
-        """Formata o título para a barra de título da janela principal (ex.: 'Tradutor de Legendas — v2.9.1')."""
+        """Formata o título para a barra de título da janela principal (ex.: 'Tradutor de Legendas — v2.9.3')."""
         return f"{nome_app} — {cls.tag()}"
 
     @classmethod
